@@ -82,23 +82,29 @@
   #pane3d { border-left: 1px solid var(--border); }
   #arcbox.v2d #pane3d { display: none; }
   #arcbox.v3d #pane2d { display: none; }
-  /* modo 2D+3D: o 3D flutua DENTRO da seção do grafo, discreto —
-     o círculo que o contém é imaginário (só o clamp do drag) */
+  /* modo 2D+3D: o 3D flutua DENTRO da seção do grafo, invisível —
+     sem fundo, sem sombra; arraste-o pegando nele direto */
   #arcbox.vsplit #pane3d {
     position: absolute; width: var(--flyd, 300px); height: var(--flyd, 300px);
-    border-radius: 50%; border: none;
-    background: rgba(13, 13, 13, .55);
+    border: none; background: transparent;
     z-index: 40; overflow: hidden;
   }
-  #arcbox.vsplit #pane3d:hover { background: rgba(13, 13, 13, .72); }
-  #flyhandle {
-    display: none; position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
-    z-index: 55; cursor: grab; color: var(--muted); font-size: 12px;
-    padding: 2px 12px; border-radius: 99px; background: rgba(35,35,34,.85);
-    border: 1px solid var(--border); user-select: none;
+  /* divisor redimensionável entre o grafo e o resto */
+  #vsplitter {
+    height: 7px; cursor: row-resize; flex: none;
+    background: var(--surface); border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
   }
-  #flyhandle:hover { color: var(--ink); border-color: var(--hl); }
-  #arcbox.vsplit #flyhandle { display: block; }
+  #vsplitter:hover { background: var(--grid); }
+  /* teleprompter */
+  #readbar {
+    display: flex; align-items: center; gap: 8px; padding: 5px 14px;
+    border-bottom: 1px solid var(--border); font-size: 11px; color: var(--muted);
+  }
+  #readbar input[type=range] { accent-color: var(--hl); width: 130px; }
+  #verses { font-size: var(--fs, 14px); }
+  .vs .tx { font-size: var(--fs, 14px); }
+  .vs.cur .tx { font-size: calc(var(--fs, 14px) * 1.14) !important; }
   #tip {
     position: fixed; pointer-events: none; display: none; z-index: 60;
     background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;
@@ -271,11 +277,9 @@
     <button data-o="chrono" title="ordem aproximada dos eventos/escrita — datações são debatidas">cronológica≈</button>
   </div>
   <div class="pane" id="pane2d"><canvas id="arc"></canvas></div>
-  <div class="pane" id="pane3d">
-    <div id="flyhandle" title="arraste para mover o 3D">⠿ 3D</div>
-    <canvas id="g3d"></canvas>
-  </div>
+  <div class="pane" id="pane3d"><canvas id="g3d"></canvas></div>
 </div>
+<div id="vsplitter" title="arraste para redimensionar o grafo"></div>
 <div id="tip"></div>
 
 <main>
@@ -285,6 +289,16 @@
       <div id="tlwrap"><div id="tl"></div><span id="tlcur"></span></div>
       <div id="chlabel">—</div>
       <span id="hint">↑↓ versos · ←→ trilha · hover no grafo mostra origem⇄destino</span>
+    </div>
+    <div id="readbar">
+      <span style="font-size:10px">A</span>
+      <input type="range" id="fsize" min="12" max="26" step="1" value="14" title="tamanho da letra">
+      <span style="font-size:15px">A</span>
+      <span style="flex:1"></span>
+      <button class="navbtn" id="play" title="leitura automática estilo teleprompter (espaço)">▶</button>
+      <span>🐢</span>
+      <input type="range" id="speed" min="1" max="10" step="1" value="4" title="velocidade da leitura automática">
+      <span>🐇</span>
     </div>
     <div id="crawl">
       <div id="fadeTop"></div><div id="fadeBot"></div>
@@ -374,18 +388,61 @@ function setOrder(o) {
   [...$("ordertabs").children].forEach(b => b.classList.toggle("on", b.dataset.o === o));
   buildAxis();
   bgCanvas = null;
-  if (g3.mode === "whole") build3dWhole();
-  else if (queryCtx) build3dQuery();
-  else build3d();
+  ZOOM.s = 1; ZOOM.x0 = 0;      // reordenar reseta o zoom da timeline
+  build3dSphere();
+  update3dSel();
   draw(); draw3d();
 }
+const ZOOM = { s: 1, x0: 0 };          // zoom/pan da timeline (única, 2D e 3D)
 function layout(w) {
-  const pad = 14, avail = w - pad * 2;
+  const pad = 14, avail = (w - pad * 2) * ZOOM.s;
   const totalN = CHAPTERS.reduce((s, c) => s + c.n, 0);
-  let x = pad;
+  let x = pad - ZOOM.x0;
   for (const c of CHAPTERS) {
-    c.w = Math.max(0.6, avail * c.n / totalN);
+    c.w = Math.max(0.6 * ZOOM.s, avail * c.n / totalN);
     c.x = x; x += c.w;
+  }
+}
+function drawAxisBase(g, h) {          // a timeline em si — idêntica no 2D e no 3D
+  const base = h - 34;
+  const maxN = Math.max(...CHAPTERS.map(c => c.n));
+  for (const c of CHAPTERS) {
+    if (c.x + c.w < 0 || c.x > 1e5) continue;
+    g.fillStyle = c.t === "VT" ? "#3987e5" : "#d95926";
+    g.fillRect(c.x, base + 3, Math.max(c.w - 0.4, 0.5), 4 + 22 * (c.n / maxN));
+  }
+  g.fillStyle = "#898781"; g.font = "9px system-ui"; g.textAlign = "center";
+  for (const b of orderedBooks()) {
+    const first = CHAPTERS[CHIDX[b.code + ".1"]];
+    const last = CHAPTERS[CHIDX[b.code + "." + b.chapters]];
+    const bw = (last.x + last.w) - first.x;
+    if (bw > 26) g.fillText(b.code, first.x + bw / 2, h - 3);
+  }
+}
+function drawAxisMarks(g, w, h) {      // dots de nota, capítulo atual, hover 3D
+  const base = h - 34;
+  g.fillStyle = "#c98500";
+  for (const key of noteMap) {
+    const c = CHAPTERS[CHIDX[key]];
+    if (c) { g.beginPath(); g.arc(c.x + c.w / 2, base + 31, 1.8, 0, 7); g.fill(); }
+  }
+  const ci = cur ? CHIDX[cur.book + "." + cur.ch] : null;
+  if (ci != null) {
+    const c = CHAPTERS[ci];
+    g.fillStyle = "#ffffff";
+    g.fillRect(c.x, base + 1, Math.max(c.w, 1.5), 2);
+  }
+  if (g3.hover) {
+    const ti = CHIDX[g3.hover.ref[0] + "." + g3.hover.ref[1]];
+    if (ti != null) {
+      const c = CHAPTERS[ti], x = c.x + c.w / 2;
+      g.fillStyle = "#c98500";
+      g.fillRect(x - 1, base - 10, 2, 12);
+      g.beginPath(); g.arc(x, base - 13, 3, 0, 7); g.fill();
+      g.font = "9px system-ui"; g.textAlign = "center";
+      g.fillText(`${g3.hover.ref[0]} ${g3.hover.ref[1]}`,
+                 Math.max(24, Math.min(w - 24, x)), base - 19);
+    }
   }
 }
 function drawBg(w, h, dpr) {
@@ -400,25 +457,34 @@ function drawBg(w, h, dpr) {
     const a = CHAPTERS[CHIDX[e[0] + "." + e[1]]], b = CHAPTERS[CHIDX[e[2] + "." + e[3]]];
     if (!a || !b) continue;
     const x1 = a.x + a.w / 2, x2 = b.x + b.w / 2, span = Math.abs(x2 - x1);
+    if (Math.max(x1, x2) < 0 || Math.min(x1, x2) > w) continue;
     g.strokeStyle = `rgba(137,135,129,${0.04 + 0.10 * Math.sqrt(e[4] / maxW)})`;
     g.beginPath();
     g.moveTo(x1, base);
     g.quadraticCurveTo((x1 + x2) / 2, base - Math.min(base - 8, span * 0.42 + 10), x2, base);
     g.stroke();
   }
-  const maxN = Math.max(...CHAPTERS.map(c => c.n));
-  for (const c of CHAPTERS) {
-    g.fillStyle = c.t === "VT" ? "#3987e5" : "#d95926";
-    g.fillRect(c.x, base + 3, Math.max(c.w - 0.4, 0.5), 4 + 22 * (c.n / maxN));
-  }
-  g.fillStyle = "#898781"; g.font = "9px system-ui"; g.textAlign = "center";
-  for (const b of META.books) {
-    const first = CHAPTERS[CHIDX[b.code + ".1"]];
-    const last = CHAPTERS[CHIDX[b.code + "." + b.chapters]];
-    const bw = (last.x + last.w) - first.x;
-    if (bw > 26) g.fillText(b.code, first.x + bw / 2, h - 3);
-  }
+  drawAxisBase(g, h);
 }
+/* zoom in/out da timeline (roda do mouse; deltaX faz pan) */
+function tlWheel(e, r) {
+  const mx = e.clientX - r.left;
+  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+    ZOOM.x0 += e.deltaX;
+  } else {
+    const k = e.deltaY < 0 ? 1.13 : 1 / 1.13;
+    const s2 = Math.max(1, Math.min(40, ZOOM.s * k));
+    ZOOM.x0 = (mx + ZOOM.x0 - 14) * (s2 / ZOOM.s) - mx + 14;
+    ZOOM.s = s2;
+  }
+  const maxX0 = (r.width - 28) * (ZOOM.s - 1);
+  ZOOM.x0 = Math.max(0, Math.min(maxX0, ZOOM.x0));
+  bgCanvas = null; g3.axisKey = null; draw();
+}
+$("arc").addEventListener("wheel", e => {
+  e.preventDefault();
+  tlWheel(e, $("arc").getBoundingClientRect());
+}, { passive: false });
 function qpoint(x1, x2, base, hgt, t) {           // ponto na quadrática
   const cx = (x1 + x2) / 2, cy = base - hgt;
   const mt = 1 - t;
@@ -435,32 +501,8 @@ function draw() {
   if (!bgCanvas || bgCanvas.width !== w * dpr) { layout(w); drawBg(w, h, dpr); }
   g.drawImage(bgCanvas, 0, 0, w, h);
   const base = h - 34;
-
-  // dots de nota nos capítulos
-  g.fillStyle = "#c98500";
-  for (const key of noteMap) {
-    const c = CHAPTERS[CHIDX[key]];
-    if (c) { g.beginPath(); g.arc(c.x + c.w / 2, base + 31, 1.8, 0, 7); g.fill(); }
-  }
-
+  drawAxisMarks(g, w, h);
   const ci = cur ? CHIDX[cur.book + "." + cur.ch] : null;
-  if (ci != null) {
-    const c = CHAPTERS[ci];
-    g.fillStyle = "#ffffff";
-    g.fillRect(c.x, base + 1, Math.max(c.w, 1.5), 2);
-  }
-  // hover num nó do 3D → marca o ponto B aqui no eixo (a timeline da seção)
-  if (g3.hover && $("pane3d").clientWidth) {
-    const ti = CHIDX[g3.hover.ref[0] + "." + g3.hover.ref[1]];
-    if (ti != null) {
-      const c = CHAPTERS[ti], x = c.x + c.w / 2;
-      g.fillStyle = "#c98500";
-      g.fillRect(x - 1, base - 10, 2, 12);
-      g.beginPath(); g.arc(x, base - 13, 3, 0, 7); g.fill();
-      g.font = "9px system-ui"; g.textAlign = "center";
-      g.fillText(`${g3.hover.ref[0]} ${g3.hover.ref[1]}`, Math.max(24, Math.min(w - 24, x)), base - 19);
-    }
-  }
   goldArcs = [];
   const arcSet = [];   // {x0, x2, ref, w01, tip}
   if (cur && verseData && verseData.links && ci != null) {
@@ -590,61 +632,10 @@ $("arc").addEventListener("click", ev => {
 });
 
 /* ================= 3D (ego-rede estilo graphify) ================= */
-const g3 = { mode: "ego", nodes: [], edges: [], rotY: 0, rotX: -0.25, zoom: 1,
+const g3 = { nodes: [], edges: [], sel: null, rotY: 0, rotX: -0.25, zoom: 1,
              drag: null, hover: null, raf: null };
-function build3d() {          // ego-rede do verso atual
-  g3.mode = "ego"; g3.nodes = []; g3.edges = [];
-  g3.centerLab = cur ? `${cur.book} ${cur.ch}:${cur.v}` : "";
-  if (!cur || !verseData || !verseData.links.length) return;
-  const maxV = Math.max(...verseData.links.map(l => l.votes), 1);
-  const N = CHAPTERS.length;
-  verseData.links.forEach((l, i) => {
-    const gi = CHIDX[l.b + "." + l.c] ?? 0;
-    const theta = (gi / N) * Math.PI * 2;             // longitude = posição no cânon
-    const phi = ((i * 137.5) % 60 - 30) * Math.PI / 180;  // espalha em latitude
-    const r = 70 + 120 * (1 - l.votes / maxV);        // mais votos = mais perto
-    g3.nodes.push({
-      x: r * Math.cos(phi) * Math.cos(theta),
-      y: r * Math.sin(phi),
-      z: r * Math.cos(phi) * Math.sin(theta),
-      vt: META.books.find(b => b.code === l.b).testament === "VT",
-      size: 3 + 5 * (l.votes / maxV), rank: l.votes,
-      lab: `${l.b} ${l.c}:${l.v}`, ref: [l.b, l.c, l.v],
-      tip: () => `<b>${refLabel(cur.book, cur.ch, cur.v)}</b> ${l.dir === "out" ? "→" : "←"} <b>${l.name} ${l.c}:${l.v}</b> · ${l.votes} votos`,
-    });
-  });
-}
-function build3dQuery() {     // a busca como núcleo, ocorrências em órbita
-  g3.mode = "ego"; g3.nodes = []; g3.edges = [];
-  g3.centerLab = `“${queryCtx.q}”`;
-  const ms = queryCtx.matches;
-  if (!ms.length) return;
-  const N = CHAPTERS.length;
-  const txt = ms.filter(m => m.kind === "texto");
-  const sem = ms.filter(m => m.kind !== "texto");
-  // órbita interna = match EXATO de texto; órbita externa = match de sentido.
-  // ângulo = posição temporal do capítulo (cânon ou cronológica).
-  const place = (m, i, len, r0, r1) => {
-    const gi = CHIDX[m.ref[0] + "." + m.ref[1]] ?? 0;
-    const theta = (gi / N) * Math.PI * 2;
-    const phi = ((i * 137.5) % 50 - 25) * Math.PI / 180;
-    const r = r0 + (r1 - r0) * (len > 1 ? i / (len - 1) : 0);
-    g3.nodes.push({
-      x: r * Math.cos(phi) * Math.cos(theta),
-      y: r * Math.sin(phi),
-      z: r * Math.cos(phi) * Math.sin(theta),
-      vt: META.books.find(b => b.code === m.ref[0]).testament === "VT",
-      size: m.kind === "texto" ? 5 : 3.2, rank: ms.length - i - (m.kind === "texto" ? 0 : 1000),
-      lab: `${m.ref[0]} ${m.ref[1]}:${m.ref[2]}`, ref: m.ref,
-      tip: () => `<b>“${queryCtx.q}”</b> → <b>${m.label}</b> · ` +
-        (m.kind === "texto" ? "frase exata" : "sentido próximo (semântica)"),
-    });
-  };
-  txt.forEach((m, i) => place(m, i, txt.length, 62, 105));
-  sem.forEach((m, i) => place(m, i, sem.length, 138, 182));
-}
-function build3dWhole() {     // bíblia inteira (estado zero / home)
-  g3.mode = "whole"; g3.nodes = []; g3.edges = [];
+function build3dSphere() {    // layout ÚNICO do 3D: a esfera da bíblia inteira
+  g3.nodes = []; g3.edges = [];
   const N = CHAPTERS.length;
   const [cb, cc] = META.center.chapter;
   const [vb, vc, vv] = META.center.verse;
@@ -670,6 +661,36 @@ function build3dWhole() {     // bíblia inteira (estado zero / home)
     if (a != null && b != null) g3.edges.push([a, b, e[4]]);
   }
 }
+function update3dSel() {      // o que muda com a seleção: destaques + linhas
+  g3.sel = null;
+  if (cur && verseData && verseData.links && verseData.links.length) {
+    const maxV = Math.max(...verseData.links.map(l => l.votes), 1);
+    const agg = new Map();
+    for (const l of verseData.links) {
+      const ti = CHIDX[l.b + "." + l.c];
+      if (ti == null) continue;
+      const a = agg.get(ti) || { ti, n: 0, w: 0, ref: [l.b, l.c, l.v] };
+      a.n++; a.w = Math.max(a.w, l.votes / maxV);
+      agg.set(ti, a);
+    }
+    g3.sel = { from: CHIDX[cur.book + "." + cur.ch] ?? null,
+               edges: [...agg.values()], lab: `${cur.book} ${cur.ch}:${cur.v}` };
+  } else if (queryCtx && queryCtx.matches.length) {
+    const agg = new Map();
+    for (const m of queryCtx.matches) {
+      const ti = CHIDX[m.ref[0] + "." + m.ref[1]];
+      if (ti == null) continue;
+      const a = agg.get(ti) || { ti, n: 0, ref: m.ref };
+      a.n++; agg.set(ti, a);
+    }
+    for (const a of agg.values()) a.w = Math.min(1, 0.35 + a.n * 0.2);
+    g3.sel = { from: null, edges: [...agg.values()], lab: `“${queryCtx.q}”` };
+  }
+}
+// aliases para os pontos de chamada existentes
+function build3d() { update3dSel(); }
+function build3dQuery() { update3dSel(); }
+function build3dWhole() { g3.sel = null; }
 function draw3d() {
   const cv = $("g3d"), pane = $("pane3d");
   if (!META || !pane.clientWidth) return;
@@ -678,7 +699,7 @@ function draw3d() {
   cv.width = w * dpr; cv.height = h * dpr;
   const g = cv.getContext("2d");
   g.scale(dpr, dpr);
-  const cx = w / 2, cy = h / 2, f = 420;
+  const cx = w / 2, cy = $("pane2d").clientWidth ? h / 2 : (h - 40) / 2, f = 420;
   const cosY = Math.cos(g3.rotY), sinY = Math.sin(g3.rotY);
   const cosX = Math.cos(g3.rotX), sinX = Math.sin(g3.rotX);
   const proj = n => {
@@ -687,83 +708,72 @@ function draw3d() {
     const s = (f / (f + z2)) * g3.zoom;
     return [cx + x * s, cy + y2 * s, s, z2];
   };
-  const pts = g3.nodes.map(n => ({ n, p: proj(n) }));
-  pts.forEach(({ n, p }) => { n._p = p; });
-  // arestas
-  if (g3.mode === "ego") {
-    for (const { n, p } of pts) {
-      const hov = g3.hover === n;
-      g.strokeStyle = hov ? "#ffffff" : `rgba(201,133,0,${0.16 + 0.5 * p[2]})`;
-      g.lineWidth = hov ? 1.6 : 0.7;
-      g.beginPath(); g.moveTo(cx, cy); g.lineTo(p[0], p[1]); g.stroke();
+  g3.nodes.forEach((n, i) => { n._p = proj(n); n._i = i; });
+  // arestas de fundo (agregado capítulo-a-capítulo)
+  const maxW = g3.edges.length ? g3.edges[0][2] : 1;
+  for (const [a, b, wgt] of g3.edges) {
+    const pa = g3.nodes[a]._p, pb = g3.nodes[b]._p;
+    const hov = g3.hover === g3.nodes[a] || g3.hover === g3.nodes[b];
+    g.strokeStyle = hov ? "#c98500" : `rgba(137,135,129,${0.06 + 0.18 * (wgt / maxW)})`;
+    g.lineWidth = hov ? 1.1 : 0.4;
+    g.beginPath(); g.moveTo(pa[0], pa[1]); g.lineTo(pb[0], pb[1]); g.stroke();
+  }
+  // as linhas que faltavam: seleção (verso atual ou busca) → capítulos conectados
+  const selSet = new Set();
+  const fromP = g3.sel
+    ? (g3.sel.from != null ? g3.nodes[g3.sel.from]._p : proj({ x: 0, y: 0, z: 0 }))
+    : null;
+  if (g3.sel) {
+    g.shadowColor = "rgba(201,133,0,.8)"; g.shadowBlur = 5;
+    for (const e of g3.sel.edges) {
+      const pb = g3.nodes[e.ti] && g3.nodes[e.ti]._p;
+      if (!pb) continue;
+      selSet.add(e.ti);
+      g.strokeStyle = "#c98500";
+      g.lineWidth = 0.5 + 2 * (e.w || 0.5);
+      g.beginPath(); g.moveTo(fromP[0], fromP[1]); g.lineTo(pb[0], pb[1]); g.stroke();
     }
-  } else {
-    const maxW = g3.edges.length ? g3.edges[0][2] : 1;
-    for (const [a, b, wgt] of g3.edges) {
-      const pa = g3.nodes[a]._p, pb = g3.nodes[b]._p;
-      const hov = g3.hover === g3.nodes[a] || g3.hover === g3.nodes[b];
-      g.strokeStyle = hov ? "#c98500" : `rgba(137,135,129,${0.07 + 0.20 * (wgt / maxW)})`;
-      g.lineWidth = hov ? 1.2 : 0.4;
-      g.beginPath(); g.moveTo(pa[0], pa[1]); g.lineTo(pb[0], pb[1]); g.stroke();
-    }
+    g.shadowBlur = 0;
   }
   // nós — mais fundo primeiro
-  const sorted = [...pts].sort((a, b) => b.p[3] - a.p[3]);
+  const sorted = [...g3.nodes].sort((a, b) => b._p[3] - a._p[3]);
+  const top = new Set(g3.sel
+    ? [...g3.sel.edges].sort((a, b) => (b.w || 0) - (a.w || 0)).slice(0, 8)
+        .map(e => g3.nodes[e.ti])
+    : []);
+  const fromIdx = g3.sel && g3.sel.from != null ? g3.sel.from : -1;
   g.font = "10px system-ui"; g.textAlign = "left";
-  const nlab = g3.mode === "ego" ? 8 : 1;
-  const top = new Set([...g3.nodes].sort((a, b) => b.rank - a.rank).slice(0, nlab));
-  for (const { n, p } of sorted) {
-    const hov = g3.hover === n;
+  for (const n of sorted) {
+    const p = n._p;
+    const hov = g3.hover === n, conn = selSet.has(n._i), isFrom = n._i === fromIdx;
     g.fillStyle = n.center ? "#c98500" : (n.vt ? "#3987e5" : "#d95926");
-    if (hov || n.center) { g.shadowColor = n.center ? "rgba(201,133,0,.9)" : "#fff"; g.shadowBlur = n.center ? 14 : 8; }
-    g.beginPath(); g.arc(p[0], p[1], n.size * p[2] * (hov ? 1.5 : 1), 0, 7); g.fill();
+    if (hov || n.center || isFrom) {
+      g.shadowColor = (n.center || isFrom) ? "rgba(201,133,0,.9)" : "#fff";
+      g.shadowBlur = n.center ? 14 : 9;
+    }
+    const sz = n.size * p[2] * (hov ? 1.6 : (conn || isFrom) ? 1.4 : 1);
+    g.beginPath(); g.arc(p[0], p[1], sz, 0, 7); g.fill();
     g.shadowBlur = 0;
-    if (top.has(n) || hov) {
-      g.fillStyle = hov ? "#ffffff" : "#c3c2b7";
+    if (isFrom) {
+      g.strokeStyle = "#ffffff"; g.lineWidth = 1.2;
+      g.beginPath(); g.arc(p[0], p[1], sz + 2.5, 0, 7); g.stroke();
+    }
+    if (hov || n.center || isFrom || top.has(n)) {
+      g.fillStyle = (hov || isFrom) ? "#ffffff" : "#c3c2b7";
       g.fillText(n.lab, p[0] + 7, p[1] + 3);
     }
   }
-  // núcleo do ego = verso atual ou a busca
-  if (g3.mode === "ego" && g3.centerLab) {
-    g.shadowColor = "rgba(201,133,0,.9)"; g.shadowBlur = 12;
-    g.fillStyle = "#c98500";
-    g.beginPath(); g.arc(cx, cy, 7, 0, 7); g.fill();
-    g.shadowBlur = 0;
+  // rótulo da seleção
+  if (g3.sel && fromP) {
     g.fillStyle = "#ffffff"; g.font = "bold 11px system-ui"; g.textAlign = "center";
-    g.fillText(g3.centerLab, cx, cy - 13);
+    g.fillText(g3.sel.lab, fromP[0], fromP[1] - 14);
   }
-  // timeline na base — só quando o eixo 2D NÃO está visível; se está,
-  // a timeline é o próprio eixo 2D da seção (hover marca A/B lá)
-  if ($("pane2d").clientWidth) return;
-  const inset = 14;
-  const sw = w - inset * 2, sy = h - 16;
-  const Nc = CHAPTERS.length;
-  const key = `${w}|${ORDER}`;
-  if (g3.stripKey !== key) {
-    const s = document.createElement("canvas");
-    s.width = Math.max(2, Math.round(sw * dpr)); s.height = Math.round(3 * dpr);
-    const sg = s.getContext("2d");
-    for (let i = 0; i < Nc; i++) {
-      sg.fillStyle = CHAPTERS[i].t === "VT" ? "rgba(57,135,229,.55)" : "rgba(217,89,38,.55)";
-      sg.fillRect((i / Nc) * s.width, 0, Math.max(s.width / Nc, 1), s.height);
-    }
-    g3.strip = s; g3.stripKey = key;
+  // a MESMA timeline do 2D (sem os arcos) quando o 2D não está visível
+  if (!$("pane2d").clientWidth) {
+    layout(w);
+    drawAxisBase(g, h);
+    drawAxisMarks(g, w, h);
   }
-  g.drawImage(g3.strip, inset, sy, sw, 3);
-  const mark = (ci, color, lab) => {
-    if (ci == null) return;
-    const x = inset + ((ci + 0.5) / Nc) * sw;
-    g.fillStyle = color;
-    g.fillRect(x - 1, sy - 9, 2, 12);
-    g.beginPath(); g.arc(x, sy - 12, 2.6, 0, 7); g.fill();
-    if (lab) {
-      g.font = "9px system-ui"; g.textAlign = "center";
-      g.fillText(lab, Math.max(inset + 16, Math.min(w - inset - 16, x)), sy - 17);
-    }
-  };
-  if (cur) mark(CHIDX[cur.book + "." + cur.ch], "#ffffff");                       // ponto A
-  if (g3.hover) mark(CHIDX[g3.hover.ref[0] + "." + g3.hover.ref[1]], "#c98500",   // ponto B
-                     `${g3.hover.ref[0]} ${g3.hover.ref[1]}`);
 }
 function loop3d() {
   if (!$("pane3d").clientWidth) { g3.raf = null; return; }
@@ -772,7 +782,18 @@ function loop3d() {
   g3.raf = requestAnimationFrame(loop3d);
 }
 function start3d() { if (!g3.raf) g3.raf = requestAnimationFrame(loop3d); }
-$("g3d").addEventListener("mousedown", e => { g3.drag = [e.clientX, e.clientY]; $("g3d").style.cursor = "grabbing"; });
+$("g3d").addEventListener("mousedown", e => {
+  if ($("arcbox").className === "vsplit") {
+    // no flyout, arrastar o próprio 3D o reposiciona (rotação fica no auto-giro)
+    const rect = $("arcbox").getBoundingClientRect();
+    fly.drag = [e.clientX - rect.left - fly.x, e.clientY - rect.top - fly.y];
+    fly.moved = 0;
+  } else {
+    g3.drag = [e.clientX, e.clientY];
+  }
+  $("g3d").style.cursor = "grabbing";
+  e.preventDefault();
+});
 window.addEventListener("mouseup", () => { g3.drag = null; $("g3d").style.cursor = "grab"; });
 window.addEventListener("mousemove", e => {
   if (g3.drag) {
@@ -784,6 +805,12 @@ window.addEventListener("mousemove", e => {
 });
 $("g3d").addEventListener("wheel", e => {
   e.preventDefault();
+  const r = $("g3d").getBoundingClientRect();
+  // sobre a timeline (3D em tela cheia): zoom da timeline; no resto, zoom da esfera
+  if (!$("pane2d").clientWidth && e.clientY - r.top > r.height - 44) {
+    tlWheel(e, r);
+    return;
+  }
   g3.zoom = Math.max(0.4, Math.min(3, g3.zoom * (e.deltaY < 0 ? 1.08 : 0.92)));
 }, { passive: false });
 $("g3d").addEventListener("mousemove", e => {
@@ -807,8 +834,20 @@ $("g3d").addEventListener("mousemove", e => {
   } else tip.style.display = "none";
 });
 $("g3d").addEventListener("mouseleave", () => { g3.hover = null; $("tip").style.display = "none"; });
-$("g3d").addEventListener("click", () => {
-  if (g3.hover) { const r = g3.hover.ref; jump(r[0], r[1], r[2]); }
+$("g3d").addEventListener("click", e => {
+  if (fly.moved > 6) { fly.moved = 0; return; }          // foi drag, não clique
+  const r = $("g3d").getBoundingClientRect();
+  if (!$("pane2d").clientWidth && e.clientY - r.top > r.height - 44) {
+    const c = chapterAt(e.clientX - r.left);              // clique na timeline
+    if (c) jump(c.book, c.ch, 1);
+    return;
+  }
+  if (g3.hover) {
+    // capítulo conectado à seleção? vai direto ao verso conectado
+    const sel = g3.sel && g3.sel.edges.find(x => x.ti === g3.hover._i);
+    const ref = sel ? sel.ref : g3.hover.ref;
+    jump(ref[0], ref[1], ref[2]);
+  }
 });
 
 /* tabs de view */
@@ -859,20 +898,47 @@ function applyFly() {
   p.style.left = (fly.x - fly.d / 2) + "px";
   p.style.top = (fly.y - fly.d / 2) + "px";
 }
-$("flyhandle").addEventListener("mousedown", e => {
-  const rect = $("arcbox").getBoundingClientRect();
-  fly.drag = [e.clientX - rect.left - fly.x, e.clientY - rect.top - fly.y];
-  e.preventDefault(); e.stopPropagation();
-});
 window.addEventListener("mousemove", e => {
   if (fly.drag) {
     const rect = $("arcbox").getBoundingClientRect();
     fly.x = e.clientX - rect.left - fly.drag[0];
     fly.y = e.clientY - rect.top - fly.drag[1];
+    fly.moved = (fly.moved || 0) + Math.abs(e.movementX) + Math.abs(e.movementY);
     applyFly();
   }
 });
 window.addEventListener("mouseup", () => { fly.drag = null; });
+
+/* divisor grafo ⇕ resto (redimensionável) */
+let splDrag = null;
+$("vsplitter").addEventListener("mousedown", e => { splDrag = e.clientY; e.preventDefault(); });
+window.addEventListener("mousemove", e => {
+  if (splDrag == null) return;
+  const box = $("arcbox");
+  const h = Math.max(110, Math.min(innerHeight - 240,
+    box.clientHeight + (e.clientY - splDrag)));
+  box.style.height = h + "px";
+  splDrag = e.clientY;
+  try { localStorage.setItem("mob_archeight", h); } catch {}
+  bgCanvas = null; applyFly(); draw(); focusVerse();
+});
+window.addEventListener("mouseup", () => { splDrag = null; });
+
+/* teleprompter: tamanho da letra + leitura automática */
+$("fsize").oninput = e => {
+  document.documentElement.style.setProperty("--fs", e.target.value + "px");
+  try { localStorage.setItem("mob_fs", e.target.value); } catch {}
+  focusVerse();
+};
+let playing = null;
+function playTick() {
+  step(1);
+  playing = setTimeout(playTick, 16000 / +$("speed").value);
+}
+$("play").onclick = () => {
+  if (playing) { clearTimeout(playing); playing = null; $("play").textContent = "▶"; }
+  else if (cur) { $("play").textContent = "⏸"; playing = setTimeout(playTick, 500); }
+};
 
 /* ================= leitor / crawl ================= */
 function agreeColor(a) { return RAMP[Math.max(0, Math.min(RAMP.length - 1, Math.floor(a * RAMP.length)))]; }
@@ -1187,6 +1253,10 @@ function step(dir) {
 }
 document.addEventListener("keydown", e => {
   if (e.target === $("q") || e.target.tagName === "TEXTAREA") return;
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "ArrowLeft") {
+    e.preventDefault(); goHome(); return;   // ⌘⇧← volta à home
+  }
+  if (e.key === " ") { e.preventDefault(); $("play").click(); return; }
   if (e.key === "ArrowDown") { e.preventDefault(); step(1); }
   if (e.key === "ArrowUp") { e.preventDefault(); step(-1); }
   if (e.key === "ArrowRight") { e.preventDefault(); trailGo(pos + 1); }
@@ -1246,6 +1316,13 @@ window.addEventListener("resize", () => { bgCanvas = null; g3.stripKey = null; a
   NOTES_LOCAL = !!META.demo;           // demo público: notas ficam no navegador
   noteMap = new Set(await notesMapFetch());
   buildAxis();
+  build3dSphere();
+  try {                                 // restaura preferências
+    const fs = localStorage.getItem("mob_fs");
+    if (fs) { $("fsize").value = fs; document.documentElement.style.setProperty("--fs", fs + "px"); }
+    const ah = localStorage.getItem("mob_archeight");
+    if (ah) $("arcbox").style.height = ah + "px";
+  } catch {}
   const t = META.totals;
   $("stats").innerHTML = `<span><b>${t.verses.toLocaleString("pt-BR")}</b> versos</span>
     <span><b>${t.crossrefs.toLocaleString("pt-BR")}</b> conexões</span>
