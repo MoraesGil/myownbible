@@ -9,6 +9,6 @@ workers_dev = false
 directory = "dist"
 binding = "ASSETS"
 
-[[routes]]
-pattern = "bible.moraesdev.io"
-custom_domain = true
+# o custom domain bible.moraesdev.io está anexado via API de conta
+# (PUT /accounts/{acc}/workers/domains) — não precisa de rota aqui, e assim
+# o deploy funciona com token sem permissões de zona.
