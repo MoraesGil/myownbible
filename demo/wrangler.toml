@@ -3,7 +3,7 @@
 name = "myownbible-demo"
 main = "worker.js"
 compatibility_date = "2026-08-01"
-workers_dev = true
+workers_dev = false
 
 [assets]
 directory = "dist"
