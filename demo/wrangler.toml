@@ -1,0 +1,14 @@
+# live demo — 100% Cloudflare free tier: Workers Assets estáticos, sem banco.
+# (assets estáticos são gratuitos e não contam requests; /api/* roda no Worker)
+name = "myownbible-demo"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+workers_dev = true
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
+
+[[routes]]
+pattern = "bible.moraesdev.io"
+custom_domain = true

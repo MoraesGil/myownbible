@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>myownbible</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-2: #232322;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --border: rgba(255,255,255,0.10);
+    --vt: #3987e5;      /* série 1 — Velho Testamento */
+    --nt: #d95926;      /* série 2 — Novo Testamento */
+    --hl: #c98500;      /* destaque de seleção (amarelo, reforçado por largura+glow) */
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--page); color: var(--ink-2);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  b { color: var(--ink); }
+  button { font: inherit; }
+
+  /* ---------- topbar ---------- */
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 10px 16px; background: var(--surface);
+    border-bottom: 1px solid var(--border); z-index: 30;
+  }
+  .logo { font-weight: 700; letter-spacing: .12em; color: var(--ink); font-size: 15px; }
+  .logo span { color: var(--hl); }
+  .searchwrap { position: relative; flex: 1; max-width: 560px; }
+  #q {
+    width: 100%; padding: 8px 12px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--page); color: var(--ink);
+    font: inherit; outline: none;
+  }
+  #q:focus { border-color: var(--vt); }
+  #sugg {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; display: none; z-index: 40;
+    box-shadow: 0 12px 32px rgba(0,0,0,.55);
+  }
+  .sg { padding: 8px 12px; cursor: pointer; display: flex; gap: 10px; align-items: baseline; }
+  .sg:hover, .sg.sel { background: rgba(57,135,229,.14); }
+  .sg .ref { color: var(--ink); font-weight: 600; white-space: nowrap; }
+  .sg .sn { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .sg .kind { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 99px; padding: 0 8px; }
+  #laytabs { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex: none; }
+  #laytabs button {
+    background: var(--surface); color: var(--muted); border: 0; padding: 4px 10px;
+    cursor: pointer; font-size: 12px;
+  }
+  #laytabs button + button { border-left: 1px solid var(--border); }
+  #laytabs button.on { background: var(--surface-2); color: var(--hl); font-weight: 600; }
+  /* layouts */
+  body.layout-leitura #arcbox { height: 18vh; min-height: 130px; }
+  body.layout-nografo #arcbox { display: none; }
+  body.layout-grafo #arcbox { height: 42vh; }
+  body.layout-grafo #pane3d {
+    flex: 0 0 32%; min-width: 280px; border-right: 1px solid var(--border);
+    border-left: none; position: relative;
+  }
+  .stats { margin-left: auto; display: flex; gap: 14px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .stats b { font-variant-numeric: tabular-nums; }
+
+  /* ---------- grafo (2d / 3d / split) ---------- */
+  #arcbox { position: relative; height: 36vh; min-height: 230px; background: var(--page); display: flex; }
+  .pane { position: relative; flex: 1; min-width: 0; }
+  .pane canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  #arc { cursor: crosshair; }
+  #g3d { cursor: grab; }
+  #pane3d { border-left: 1px solid var(--border); }
+  #arcbox.v2d #pane3d { display: none; }
+  #arcbox.v3d #pane2d { display: none; }
+  /* modo 2D+3D: o 3D flutua DENTRO da seção do grafo, discreto —
+     o círculo que o contém é imaginário (só o clamp do drag) */
+  #arcbox.vsplit #pane3d {
+    position: absolute; width: var(--flyd, 300px); height: var(--flyd, 300px);
+    border-radius: 50%; border: none;
+    background: rgba(13, 13, 13, .55);
+    z-index: 40; overflow: hidden;
+  }
+  #arcbox.vsplit #pane3d:hover { background: rgba(13, 13, 13, .72); }
+  #flyhandle {
+    display: none; position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    z-index: 55; cursor: grab; color: var(--muted); font-size: 12px;
+    padding: 2px 12px; border-radius: 99px; background: rgba(35,35,34,.85);
+    border: 1px solid var(--border); user-select: none;
+  }
+  #flyhandle:hover { color: var(--ink); border-color: var(--hl); }
+  #arcbox.vsplit #flyhandle { display: block; }
+  #tip {
+    position: fixed; pointer-events: none; display: none; z-index: 60;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; font-size: 12px; color: var(--ink); white-space: nowrap;
+    box-shadow: 0 6px 18px rgba(0,0,0,.5);
+  }
+  .legend {
+    position: absolute; top: 8px; left: 12px; display: flex; gap: 14px;
+    font-size: 11px; color: var(--muted); z-index: 10; pointer-events: none;
+  }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+  #viewtabs {
+    position: absolute; top: 8px; right: 12px; z-index: 10;
+    display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  #viewtabs button, #ordertabs button {
+    background: var(--surface); color: var(--muted); border: 0; padding: 4px 12px;
+    cursor: pointer; font-size: 12px;
+  }
+  #viewtabs button + button, #ordertabs button + button { border-left: 1px solid var(--border); }
+  #viewtabs button.on, #ordertabs button.on { background: var(--surface-2); color: var(--hl); font-weight: 600; }
+
+  /* ---------- corpo ---------- */
+  main { flex: 1; display: flex; min-height: 0; border-top: 1px solid var(--border); }
+  #reader {
+    flex: 1.25; min-width: 0; display: flex; flex-direction: column;
+    background: var(--surface); border-right: 1px solid var(--border);
+  }
+  #crawlhead {
+    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+    border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  #chlabel { color: var(--ink); font-weight: 700; letter-spacing: .04em; white-space: nowrap; }
+  .notedot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--hl); margin-left: 6px; vertical-align: 1px; }
+  .navbtn {
+    background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--border);
+    border-radius: 7px; padding: 4px 11px; cursor: pointer; font-size: 13px;
+  }
+  .navbtn:hover { border-color: var(--vt); color: var(--ink); }
+  .navbtn:disabled { opacity: .35; cursor: default; }
+  /* breadcrumb — mini timeline de pontinhos */
+  #tlwrap { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+  #tl {
+    display: flex; align-items: center; gap: 0; overflow-x: auto; scrollbar-width: none;
+    padding: 6px 2px; min-width: 0;
+  }
+  #tl::-webkit-scrollbar { display: none; }
+  .tld { position: relative; display: flex; align-items: center; cursor: pointer; }
+  .tld i {
+    width: 9px; height: 9px; border-radius: 50%; background: var(--grid);
+    border: 1px solid var(--muted); flex: none; transition: transform .15s;
+  }
+  .tld:hover i { transform: scale(1.5); background: var(--surface-2); }
+  .tld.cur i { background: var(--hl); border-color: var(--hl); transform: scale(1.35); }
+  .tld + .tld::before { content: ""; width: 14px; height: 1px; background: var(--grid); order: -1; }
+  #tlcur { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  #hint { margin-left: auto; color: var(--muted); font-size: 11px; white-space: nowrap; }
+
+  #crawl { flex: 1; overflow: hidden; position: relative; perspective: 640px; padding: 0 18px; }
+  #crawl.list { overflow-y: auto; perspective: none; }
+  #verses.list { position: static; transform: none !important; padding: 8px 0; }
+  #verses { position: absolute; left: 18px; right: 18px; transition: transform .28s ease; transform-style: preserve-3d; }
+  .vs { display: flex; gap: 12px; padding: 9px 10px; border-radius: 8px; cursor: pointer; transition: opacity .25s, filter .25s, background .2s; }
+  .vs .num { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 2.4em; text-align: right; }
+  .vs .num .vnote { color: var(--hl); }
+  .vs .tx { flex: 1; color: var(--ink-2); }
+  .vs .badges { display: flex; gap: 6px; align-items: center; flex-direction: column; padding-top: 4px; }
+  .dotA { width: 9px; height: 9px; border-radius: 50%; }
+  .nx { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .vs.cur { background: rgba(57,135,229,.10); outline: 1px solid rgba(57,135,229,.35); }
+  .vs.cur .tx { color: var(--ink); font-size: 15.5px; }
+  .vs.cur .num { color: var(--hl); font-weight: 700; }
+  #fadeTop, #fadeBot { position: absolute; left: 0; right: 0; height: 70px; pointer-events: none; z-index: 5; }
+  #fadeTop { top: 0; background: linear-gradient(var(--surface), transparent); }
+  #fadeBot { bottom: 0; background: linear-gradient(transparent, var(--surface)); }
+
+  /* HUD */
+  #hud { flex: 1; min-width: 340px; max-width: 480px; overflow-y: auto; background: var(--page); padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  #bigref { font-size: 19px; font-weight: 700; color: var(--ink); letter-spacing: .02em; }
+  .meterrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; }
+  .meter { flex: 1; height: 8px; border-radius: 99px; background: var(--grid); overflow: hidden; }
+  .meter i { display: block; height: 100%; border-radius: 99px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .chip { font-size: 11px; border: 1px solid var(--border); border-radius: 99px; padding: 1px 9px; color: var(--ink-2); }
+  .chip.miss { color: var(--muted); border-style: dashed; }
+  .chip.origin { color: var(--hl); border-color: var(--hl); font-weight: 600; }
+  h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .14em; color: var(--muted); margin-bottom: 8px; font-weight: 600; display: flex; align-items: baseline; gap: 8px; }
+  .link { display: flex; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; border-bottom: 1px solid var(--grid); align-items: baseline; }
+  .link:last-child { border-bottom: 0; }
+  .link:hover { background: rgba(201,133,0,.10); }
+  .link .lref { color: var(--ink); font-weight: 600; white-space: nowrap; font-size: 13px; }
+  .link .lsn { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .link .votes { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .dir { font-size: 11px; color: var(--vt); }
+  .dir.in { color: var(--nt); }
+  #vtoggle { cursor: pointer; color: var(--vt); font-size: 12px; background: none; border: none; padding: 0; }
+  .minibtn { cursor: pointer; color: var(--vt); font-size: 11px; background: none; border: none; padding: 0; text-transform: none; letter-spacing: 0; }
+  .minibtn:hover { color: var(--ink); }
+  .ver { padding: 7px 0; border-bottom: 1px solid var(--grid); font-size: 12.5px; }
+  .ver:last-child { border-bottom: 0; }
+  .ver .t { color: var(--hl); font-weight: 700; font-size: 11px; margin-right: 8px; }
+  .empty { color: var(--muted); font-size: 12px; padding: 6px 0; }
+  /* notas */
+  .notelabel { font-size: 11px; color: var(--muted); margin: 8px 0 4px; }
+  .notelabel b { color: var(--hl); font-weight: 600; }
+  textarea.note {
+    width: 100%; min-height: 54px; resize: vertical; border-radius: 8px;
+    background: var(--page); color: var(--ink); border: 1px solid var(--border);
+    padding: 8px 10px; font: 13px/1.45 system-ui, sans-serif; outline: none;
+  }
+  textarea.note:focus { border-color: var(--hl); }
+  #notestate { font-size: 10px; color: var(--muted); text-transform: none; letter-spacing: 0; }
+  /* estado zero */
+  #zerocta {
+    position: absolute; inset: 0; display: none; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px; z-index: 6;
+  }
+  #zerocta.on { display: flex; }
+  #zerocta .big { font-size: 26px; font-weight: 700; color: var(--ink); letter-spacing: .12em; }
+  #zerocta .big span { color: var(--hl); }
+  #zerocta .sub { color: var(--muted); font-size: 12px; }
+  .cta {
+    background: var(--hl); color: #0d0d0d; border: 0; border-radius: 10px;
+    padding: 10px 24px; font-weight: 700; font-size: 15px; cursor: pointer;
+  }
+  .cta:hover { filter: brightness(1.15); }
+  .cta2 {
+    background: none; border: 1px solid var(--border); color: var(--ink-2);
+    border-radius: 10px; padding: 8px 18px; cursor: pointer; font-size: 13px;
+  }
+  .cta2:hover { border-color: var(--hl); color: var(--ink); }
+  ::-webkit-scrollbar { width: 9px; }
+  ::-webkit-scrollbar-thumb { background: var(--grid); border-radius: 99px; }
+</style>
+</head>
+<body data-palette="#3987e5,#d95926,#c98500">
+
+<header>
+  <div class="logo">MYOWN<span>BIBLE</span></div>
+  <button class="navbtn" id="home" title="1º clique: ponto 0 da trilha · 2º clique: limpa tudo">⌂</button>
+  <button class="navbtn" id="back" title="trilha: anterior (←)">◀</button>
+  <button class="navbtn" id="next" title="trilha: próximo (→)">▶</button>
+  <div class="searchwrap">
+    <input id="q" placeholder="busque um trecho ou passagem — ex.: jo 3:16, 'no princípio', fé…" autocomplete="off">
+    <div id="sugg"></div>
+  </div>
+  <div id="laytabs">
+    <button data-l="leitura" title="destaque na leitura — grafo compacto">leitura</button>
+    <button data-l="padrao" class="on" title="layout atual">padrão</button>
+    <button data-l="grafo" title="destaque no grafo — 2D no topo + 3D na lateral, em L">grafo L</button>
+    <button data-l="nografo" title="só o texto, sem grafo">s/ grafo</button>
+  </div>
+  <div class="stats" id="stats"></div>
+</header>
+
+<div id="arcbox" class="v2d">
+  <div class="legend">
+    <span><i style="background:var(--vt)"></i>Velho Testamento</span>
+    <span><i style="background:var(--nt)"></i>Novo Testamento</span>
+    <span><i style="background:var(--hl)"></i>conexões do verso atual</span>
+  </div>
+  <div id="viewtabs">
+    <button data-v="v2d" class="on">2D</button>
+    <button data-v="v3d">3D</button>
+    <button data-v="vsplit">2D + 3D</button>
+  </div>
+  <div id="ordertabs" style="position:absolute; top:8px; right:196px; z-index:10; display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden">
+    <button data-o="canon" class="on" title="ordem dos livros como no cânon (por gênero literário)">canônica</button>
+    <button data-o="chrono" title="ordem aproximada dos eventos/escrita — datações são debatidas">cronológica≈</button>
+  </div>
+  <div class="pane" id="pane2d"><canvas id="arc"></canvas></div>
+  <div class="pane" id="pane3d">
+    <div id="flyhandle" title="arraste para mover o 3D">⠿ 3D</div>
+    <canvas id="g3d"></canvas>
+  </div>
+</div>
+<div id="tip"></div>
+
+<main>
+  <section id="reader">
+    <div id="crawlhead">
+      <button class="navbtn" id="home2" title="1º clique: ponto 0 da trilha · 2º clique: limpa tudo">⌂</button>
+      <div id="tlwrap"><div id="tl"></div><span id="tlcur"></span></div>
+      <div id="chlabel">—</div>
+      <span id="hint">↑↓ versos · ←→ trilha · hover no grafo mostra origem⇄destino</span>
+    </div>
+    <div id="crawl">
+      <div id="fadeTop"></div><div id="fadeBot"></div>
+      <div id="verses"></div>
+      <div id="zerocta">
+        <div class="big">MYOWN<span>BIBLE</span></div>
+        <div class="sub">estado zero — a bíblia inteira no grafo acima</div>
+        <button class="cta" id="ctastart">▶ começar a leitura — Gênesis 1:1</button>
+        <button class="cta2" id="ctacenter">ir ao ponto central da bíblia</button>
+        <div class="sub">ou busque um trecho ou passagem na barra acima</div>
+      </div>
+    </div>
+  </section>
+
+  <aside id="hud">
+    <div class="panel">
+      <div id="bigref">—</div>
+      <div class="meterrow">
+        <span>consenso</span>
+        <div class="meter"><i id="meterfill" style="width:0"></i></div>
+        <b id="meterval">—</b>
+      </div>
+      <div class="chips" id="presence"></div>
+    </div>
+    <div class="panel">
+      <h3>Conexões <span id="ncon" style="color:var(--hl)"></span></h3>
+      <div id="links"><div class="empty">selecione um verso</div></div>
+    </div>
+    <div class="panel" id="notesPanel">
+      <h3>Notas <span id="notestate"></span>
+        <span style="margin-left:auto; display:flex; gap:10px">
+          <button class="minibtn" id="nbackup" title="baixar todas as suas notas (JSON)">⬇ backup</button>
+          <button class="minibtn" id="nrestore" title="restaurar notas de um arquivo JSON">⬆ restaurar</button>
+        </span></h3>
+      <input type="file" id="nfile" accept="application/json" style="display:none">
+      <div class="notelabel">nota do <b id="nvref">verso</b></div>
+      <textarea class="note" id="noteV" placeholder="anotação pessoal deste versículo…"></textarea>
+      <div class="notelabel">nota do <b id="ncref">capítulo</b></div>
+      <textarea class="note" id="noteC" placeholder="anotação pessoal deste capítulo…"></textarea>
+    </div>
+    <div class="panel">
+      <h3>As <span id="ntrans">…</span> versões <button id="vtoggle">mostrar</button></h3>
+      <div id="versions" style="display:none"></div>
+    </div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const api = p => fetch(p).then(r => r.json());
+const post = (p, b) => fetch(p, { method: "POST", body: JSON.stringify(b) }).then(r => r.json());
+const RAMP = ["#86b6ef","#6da7ec","#5598e7","#3987e5","#2a78d6","#256abf","#1c5cab","#184f95"];
+
+let META, CHAPTERS = [], CHIDX = {};
+let cur = null;                       // null = estado zero (home limpo)
+let chapterData = null, verseData = null, chapterNotes = { chapter: null, verses: {} };
+let noteMap = new Set();
+let bgCanvas = null, goldArcs = [], hoverArc = null;
+let queryCtx = null;                  // busca ao centro do grafo
+
+/* ================= eixo / 2D ================= */
+// ordem cronológica APROXIMADA dos eventos/escrita (datações são debatidas)
+const CHRONO = ["JOB","GEN","EXO","LEV","NUM","DEU","JOS","JDG","RUT","1SA","2SA",
+  "1CH","PSA","SNG","PRO","ECC","1KI","2KI","2CH","OBA","JOL","JON","AMO","HOS",
+  "ISA","MIC","NAM","ZEP","HAB","JER","LAM","EZK","DAN","EST","EZR","HAG","ZEC",
+  "NEH","MAL","MAT","MRK","LUK","JHN","ACT","JAS","GAL","1TH","2TH","1CO","2CO",
+  "ROM","COL","PHM","EPH","PHP","1TI","TIT","1PE","2PE","2TI","HEB","JUD",
+  "1JN","2JN","3JN","REV"];
+let ORDER = "canon";
+function orderedBooks() {
+  if (ORDER === "canon") return META.books;
+  const by = {};
+  META.books.forEach(b => { by[b.code] = b; });
+  return CHRONO.map(c => by[c]).filter(Boolean);
+}
+function buildAxis() {
+  CHAPTERS = []; CHIDX = {};
+  for (const b of orderedBooks())
+    for (let c = 1; c <= b.chapters; c++)
+      CHAPTERS.push({ book: b.code, name: b.name, ch: c,
+                      n: b.verse_counts[c-1][0], t: b.testament });
+  CHAPTERS.forEach((c, i) => { CHIDX[c.book + "." + c.ch] = i; });
+}
+function setOrder(o) {
+  ORDER = o;
+  [...$("ordertabs").children].forEach(b => b.classList.toggle("on", b.dataset.o === o));
+  buildAxis();
+  bgCanvas = null;
+  if (g3.mode === "whole") build3dWhole();
+  else if (queryCtx) build3dQuery();
+  else build3d();
+  draw(); draw3d();
+}
+function layout(w) {
+  const pad = 14, avail = w - pad * 2;
+  const totalN = CHAPTERS.reduce((s, c) => s + c.n, 0);
+  let x = pad;
+  for (const c of CHAPTERS) {
+    c.w = Math.max(0.6, avail * c.n / totalN);
+    c.x = x; x += c.w;
+  }
+}
+function drawBg(w, h, dpr) {
+  bgCanvas = document.createElement("canvas");
+  bgCanvas.width = w * dpr; bgCanvas.height = h * dpr;
+  const g = bgCanvas.getContext("2d");
+  g.scale(dpr, dpr);
+  const base = h - 34;
+  g.lineWidth = 0.5;
+  const maxW = META.bg_edges[0] ? META.bg_edges[0][4] : 1;
+  for (const e of META.bg_edges) {
+    const a = CHAPTERS[CHIDX[e[0] + "." + e[1]]], b = CHAPTERS[CHIDX[e[2] + "." + e[3]]];
+    if (!a || !b) continue;
+    const x1 = a.x + a.w / 2, x2 = b.x + b.w / 2, span = Math.abs(x2 - x1);
+    g.strokeStyle = `rgba(137,135,129,${0.04 + 0.10 * Math.sqrt(e[4] / maxW)})`;
+    g.beginPath();
+    g.moveTo(x1, base);
+    g.quadraticCurveTo((x1 + x2) / 2, base - Math.min(base - 8, span * 0.42 + 10), x2, base);
+    g.stroke();
+  }
+  const maxN = Math.max(...CHAPTERS.map(c => c.n));
+  for (const c of CHAPTERS) {
+    g.fillStyle = c.t === "VT" ? "#3987e5" : "#d95926";
+    g.fillRect(c.x, base + 3, Math.max(c.w - 0.4, 0.5), 4 + 22 * (c.n / maxN));
+  }
+  g.fillStyle = "#898781"; g.font = "9px system-ui"; g.textAlign = "center";
+  for (const b of META.books) {
+    const first = CHAPTERS[CHIDX[b.code + ".1"]];
+    const last = CHAPTERS[CHIDX[b.code + "." + b.chapters]];
+    const bw = (last.x + last.w) - first.x;
+    if (bw > 26) g.fillText(b.code, first.x + bw / 2, h - 3);
+  }
+}
+function qpoint(x1, x2, base, hgt, t) {           // ponto na quadrática
+  const cx = (x1 + x2) / 2, cy = base - hgt;
+  const mt = 1 - t;
+  return [mt*mt*x1 + 2*mt*t*cx + t*t*x2, mt*mt*base + 2*mt*t*cy + t*t*base];
+}
+function draw() {
+  const cv = $("arc"), pane = $("pane2d");
+  if (!META || !pane.clientWidth) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = pane.clientWidth, h = pane.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d");
+  g.scale(dpr, dpr);
+  if (!bgCanvas || bgCanvas.width !== w * dpr) { layout(w); drawBg(w, h, dpr); }
+  g.drawImage(bgCanvas, 0, 0, w, h);
+  const base = h - 34;
+
+  // dots de nota nos capítulos
+  g.fillStyle = "#c98500";
+  for (const key of noteMap) {
+    const c = CHAPTERS[CHIDX[key]];
+    if (c) { g.beginPath(); g.arc(c.x + c.w / 2, base + 31, 1.8, 0, 7); g.fill(); }
+  }
+
+  const ci = cur ? CHIDX[cur.book + "." + cur.ch] : null;
+  if (ci != null) {
+    const c = CHAPTERS[ci];
+    g.fillStyle = "#ffffff";
+    g.fillRect(c.x, base + 1, Math.max(c.w, 1.5), 2);
+  }
+  // hover num nó do 3D → marca o ponto B aqui no eixo (a timeline da seção)
+  if (g3.hover && $("pane3d").clientWidth) {
+    const ti = CHIDX[g3.hover.ref[0] + "." + g3.hover.ref[1]];
+    if (ti != null) {
+      const c = CHAPTERS[ti], x = c.x + c.w / 2;
+      g.fillStyle = "#c98500";
+      g.fillRect(x - 1, base - 10, 2, 12);
+      g.beginPath(); g.arc(x, base - 13, 3, 0, 7); g.fill();
+      g.font = "9px system-ui"; g.textAlign = "center";
+      g.fillText(`${g3.hover.ref[0]} ${g3.hover.ref[1]}`, Math.max(24, Math.min(w - 24, x)), base - 19);
+    }
+  }
+  goldArcs = [];
+  const arcSet = [];   // {x0, x2, ref, w01, tip}
+  if (cur && verseData && verseData.links && ci != null) {
+    const x0 = CHAPTERS[ci].x + CHAPTERS[ci].w / 2;
+    const maxV = Math.max(...verseData.links.map(l => l.votes), 1);
+    for (const l of verseData.links) {
+      const ti = CHIDX[l.b + "." + l.c];
+      if (ti == null) continue;
+      const t = CHAPTERS[ti];
+      arcSet.push({ x0, x2: t.x + t.w / 2, ref: [l.b, l.c, l.v], w01: l.votes / maxV,
+        tip: `<b>${refLabel(cur.book, cur.ch, cur.v)}</b> ${l.dir === "out" ? "→" : "←"} <b>${l.name} ${l.c}:${l.v}</b> · ${l.votes} votos` });
+    }
+  } else if (queryCtx) {
+    // a busca ao centro: leque do meio do eixo até cada capítulo com ocorrência
+    const x0 = w / 2;
+    const agg = new Map();
+    for (const m of queryCtx.matches) {
+      const ti = CHIDX[m.ref[0] + "." + m.ref[1]];
+      if (ti == null) continue;
+      const a = agg.get(ti) || { n: 0, ref: m.ref, name: CHAPTERS[ti].name, ch: m.ref[1] };
+      a.n++; agg.set(ti, a);
+    }
+    const maxN = Math.max(...[...agg.values()].map(a => a.n), 1);
+    for (const [ti, a] of agg) {
+      const t = CHAPTERS[ti];
+      arcSet.push({ x0, x2: t.x + t.w / 2, ref: a.ref, w01: a.n / maxN,
+        tip: `<b>“${queryCtx.q}”</b> → <b>${a.name} ${a.ch}</b> · ${a.n} ocorrência${a.n > 1 ? "s" : ""}` });
+    }
+  }
+  if (arcSet.length) {
+    g.shadowColor = "rgba(201,133,0,.8)"; g.shadowBlur = 6;
+    for (const a of arcSet) {
+      const span = Math.abs(a.x2 - a.x0);
+      const hgt = Math.min(base - 8, span * 0.42 + 10);
+      const hov = hoverArc && hoverArc.kind === "gold" && hoverArc.a === a;
+      g.strokeStyle = hov ? "#ffffff" : "#c98500";
+      g.lineWidth = (0.8 + 2.2 * a.w01) * (hov ? 1.8 : 1);
+      g.beginPath();
+      g.moveTo(a.x0, base);
+      g.quadraticCurveTo((a.x0 + a.x2) / 2, base - hgt, a.x2, base);
+      g.stroke();
+      goldArcs.push({ ...a, hgt });
+    }
+    g.shadowBlur = 0;
+    g.fillStyle = "#ffffff";
+    g.beginPath(); g.arc(arcSet[0].x0, base, 3, 0, 7); g.fill();
+  }
+  if (hoverArc && hoverArc.kind === "bg") {
+    const e = hoverArc.e;
+    const a = CHAPTERS[CHIDX[e[0] + "." + e[1]]], b = CHAPTERS[CHIDX[e[2] + "." + e[3]]];
+    const x1 = a.x + a.w / 2, x2 = b.x + b.w / 2, span = Math.abs(x2 - x1);
+    g.strokeStyle = "#ffffff"; g.lineWidth = 1.4;
+    g.beginPath();
+    g.moveTo(x1, base);
+    g.quadraticCurveTo((x1 + x2) / 2, base - Math.min(base - 8, span * 0.42 + 10), x2, base);
+    g.stroke();
+  }
+}
+function chapterAt(mx) { return CHAPTERS.find(c => mx >= c.x && mx <= c.x + c.w); }
+
+function arcHitTest(mx, my, h) {
+  const base = h - 34;
+  if (my > base - 2) return null;
+  // 1º: arcos dourados (verso atual ou busca ao centro)
+  for (const a of goldArcs) {
+    for (let i = 1; i < 24; i++) {
+      const [px, py] = qpoint(a.x0, a.x2, base, a.hgt, i / 24);
+      if ((px-mx)*(px-mx) + (py-my)*(py-my) < 30) return { kind: "gold", a };
+    }
+  }
+  // 2º: arcos de fundo (agregado por capítulo)
+  for (const e of META.bg_edges) {
+    const a = CHAPTERS[CHIDX[e[0] + "." + e[1]]], b = CHAPTERS[CHIDX[e[2] + "." + e[3]]];
+    if (!a || !b) continue;
+    const x1 = a.x + a.w / 2, x2 = b.x + b.w / 2;
+    if (mx < Math.min(x1, x2) - 6 || mx > Math.max(x1, x2) + 6) continue;
+    const span = Math.abs(x2 - x1);
+    const hgt = Math.min(base - 8, span * 0.42 + 10);
+    for (let i = 1; i < 20; i++) {
+      const [px, py] = qpoint(x1, x2, base, hgt, i / 20);
+      if ((px-mx)*(px-mx) + (py-my)*(py-my) < 16) return { kind: "bg", e };
+    }
+  }
+  return null;
+}
+
+let hoverRAF = null;
+$("arc").addEventListener("mousemove", ev => {
+  if (hoverRAF) return;
+  hoverRAF = requestAnimationFrame(() => {
+    hoverRAF = null;
+    const r = $("arc").getBoundingClientRect();
+    const mx = ev.clientX - r.left, my = ev.clientY - r.top;
+    const tip = $("tip");
+    const hit = arcHitTest(mx, my, r.height);
+    if ((hit && hit.a) !== (hoverArc && hoverArc.a) || (hit && hit.e) !== (hoverArc && hoverArc.e)) {
+      hoverArc = hit; draw();
+    }
+    $("arc").style.cursor = hit ? "pointer" : "crosshair";
+    if (hit && hit.kind === "gold") {
+      tip.innerHTML = hit.a.tip;
+    } else if (hit && hit.kind === "bg") {
+      const e = hit.e;
+      const an = META.books.find(b => b.code === e[0]).name;
+      const bn = META.books.find(b => b.code === e[2]).name;
+      tip.innerHTML = `<b>${an} ${e[1]}</b> ⇄ <b>${bn} ${e[3]}</b> · ${e[4]} conexões`;
+    } else {
+      const c = chapterAt(mx);
+      if (c && my > r.height - 34) {
+        tip.innerHTML = `<b>${c.name} ${c.ch}</b> · ${c.n} vv` +
+          (noteMap.has(c.book + "." + c.ch) ? ' · <span style="color:var(--hl)">●</span> tem nota' : "");
+      } else { tip.style.display = "none"; return; }
+    }
+    tip.style.display = "block";
+    tip.style.left = Math.min(ev.clientX + 14, innerWidth - 260) + "px";
+    tip.style.top = (ev.clientY - 34) + "px";
+  });
+});
+$("arc").addEventListener("mouseleave", () => { $("tip").style.display = "none"; if (hoverArc) { hoverArc = null; draw(); } });
+$("arc").addEventListener("click", ev => {
+  const r = $("arc").getBoundingClientRect();
+  const hit = arcHitTest(ev.clientX - r.left, ev.clientY - r.top, r.height);
+  if (hit && hit.kind === "gold") return jump(hit.a.ref[0], hit.a.ref[1], hit.a.ref[2]);
+  if (hit && hit.kind === "bg") return jump(hit.e[2], hit.e[3], 1);
+  const c = chapterAt(ev.clientX - r.left);
+  if (c) jump(c.book, c.ch, 1);
+});
+
+/* ================= 3D (ego-rede estilo graphify) ================= */
+const g3 = { mode: "ego", nodes: [], edges: [], rotY: 0, rotX: -0.25, zoom: 1,
+             drag: null, hover: null, raf: null };
+function build3d() {          // ego-rede do verso atual
+  g3.mode = "ego"; g3.nodes = []; g3.edges = [];
+  g3.centerLab = cur ? `${cur.book} ${cur.ch}:${cur.v}` : "";
+  if (!cur || !verseData || !verseData.links.length) return;
+  const maxV = Math.max(...verseData.links.map(l => l.votes), 1);
+  const N = CHAPTERS.length;
+  verseData.links.forEach((l, i) => {
+    const gi = CHIDX[l.b + "." + l.c] ?? 0;
+    const theta = (gi / N) * Math.PI * 2;             // longitude = posição no cânon
+    const phi = ((i * 137.5) % 60 - 30) * Math.PI / 180;  // espalha em latitude
+    const r = 70 + 120 * (1 - l.votes / maxV);        // mais votos = mais perto
+    g3.nodes.push({
+      x: r * Math.cos(phi) * Math.cos(theta),
+      y: r * Math.sin(phi),
+      z: r * Math.cos(phi) * Math.sin(theta),
+      vt: META.books.find(b => b.code === l.b).testament === "VT",
+      size: 3 + 5 * (l.votes / maxV), rank: l.votes,
+      lab: `${l.b} ${l.c}:${l.v}`, ref: [l.b, l.c, l.v],
+      tip: () => `<b>${refLabel(cur.book, cur.ch, cur.v)}</b> ${l.dir === "out" ? "→" : "←"} <b>${l.name} ${l.c}:${l.v}</b> · ${l.votes} votos`,
+    });
+  });
+}
+function build3dQuery() {     // a busca como núcleo, ocorrências em órbita
+  g3.mode = "ego"; g3.nodes = []; g3.edges = [];
+  g3.centerLab = `“${queryCtx.q}”`;
+  const ms = queryCtx.matches;
+  if (!ms.length) return;
+  const N = CHAPTERS.length;
+  const txt = ms.filter(m => m.kind === "texto");
+  const sem = ms.filter(m => m.kind !== "texto");
+  // órbita interna = match EXATO de texto; órbita externa = match de sentido.
+  // ângulo = posição temporal do capítulo (cânon ou cronológica).
+  const place = (m, i, len, r0, r1) => {
+    const gi = CHIDX[m.ref[0] + "." + m.ref[1]] ?? 0;
+    const theta = (gi / N) * Math.PI * 2;
+    const phi = ((i * 137.5) % 50 - 25) * Math.PI / 180;
+    const r = r0 + (r1 - r0) * (len > 1 ? i / (len - 1) : 0);
+    g3.nodes.push({
+      x: r * Math.cos(phi) * Math.cos(theta),
+      y: r * Math.sin(phi),
+      z: r * Math.cos(phi) * Math.sin(theta),
+      vt: META.books.find(b => b.code === m.ref[0]).testament === "VT",
+      size: m.kind === "texto" ? 5 : 3.2, rank: ms.length - i - (m.kind === "texto" ? 0 : 1000),
+      lab: `${m.ref[0]} ${m.ref[1]}:${m.ref[2]}`, ref: m.ref,
+      tip: () => `<b>“${queryCtx.q}”</b> → <b>${m.label}</b> · ` +
+        (m.kind === "texto" ? "frase exata" : "sentido próximo (semântica)"),
+    });
+  };
+  txt.forEach((m, i) => place(m, i, txt.length, 62, 105));
+  sem.forEach((m, i) => place(m, i, sem.length, 138, 182));
+}
+function build3dWhole() {     // bíblia inteira (estado zero / home)
+  g3.mode = "whole"; g3.nodes = []; g3.edges = [];
+  const N = CHAPTERS.length;
+  const [cb, cc] = META.center.chapter;
+  const [vb, vc, vv] = META.center.verse;
+  const maxN = Math.max(...CHAPTERS.map(c => c.n));
+  CHAPTERS.forEach((c, i) => {
+    const isCenter = c.book === cb && c.ch === cc;
+    const t = i / (N - 1);
+    const y = (1 - 2 * t) * 105;                     // VT no norte → NT no sul
+    const rr = Math.sqrt(Math.max(0, 1 - (y / 105) ** 2)) * 150;
+    const theta = i * 0.19;                          // espiral
+    g3.nodes.push(isCenter
+      ? { x: 0, y: 0, z: 0, vt: c.t === "VT", size: 8, center: true, rank: 1e9,
+          lab: `☉ ${c.book} ${c.ch}`, ref: [c.book, c.ch, 1],
+          tip: () => `<b>${c.name} ${c.ch}</b> · ponto central da bíblia — ${META.center.n.toLocaleString("pt-BR")} conexões (verso mais conectado: ${refLabel(vb, vc, vv)})` }
+      : { x: rr * Math.cos(theta), y, z: rr * Math.sin(theta), vt: c.t === "VT",
+          size: 1.1 + 2.6 * (c.n / maxN), rank: c.n,
+          lab: `${c.book} ${c.ch}`, ref: [c.book, c.ch, 1],
+          tip: () => `<b>${c.name} ${c.ch}</b> · ${c.n} vv` +
+            (noteMap.has(c.book + "." + c.ch) ? ' · <span style="color:var(--hl)">●</span> nota' : "") });
+  });
+  for (const e of META.bg_edges.slice(0, 500)) {
+    const a = CHIDX[e[0] + "." + e[1]], b = CHIDX[e[2] + "." + e[3]];
+    if (a != null && b != null) g3.edges.push([a, b, e[4]]);
+  }
+}
+function draw3d() {
+  const cv = $("g3d"), pane = $("pane3d");
+  if (!META || !pane.clientWidth) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = pane.clientWidth, h = pane.clientHeight;
+  cv.width = w * dpr; cv.height = h * dpr;
+  const g = cv.getContext("2d");
+  g.scale(dpr, dpr);
+  const cx = w / 2, cy = h / 2, f = 420;
+  const cosY = Math.cos(g3.rotY), sinY = Math.sin(g3.rotY);
+  const cosX = Math.cos(g3.rotX), sinX = Math.sin(g3.rotX);
+  const proj = n => {
+    let x = n.x * cosY - n.z * sinY, z = n.x * sinY + n.z * cosY, y = n.y;
+    const y2 = y * cosX - z * sinX, z2 = y * sinX + z * cosX;
+    const s = (f / (f + z2)) * g3.zoom;
+    return [cx + x * s, cy + y2 * s, s, z2];
+  };
+  const pts = g3.nodes.map(n => ({ n, p: proj(n) }));
+  pts.forEach(({ n, p }) => { n._p = p; });
+  // arestas
+  if (g3.mode === "ego") {
+    for (const { n, p } of pts) {
+      const hov = g3.hover === n;
+      g.strokeStyle = hov ? "#ffffff" : `rgba(201,133,0,${0.16 + 0.5 * p[2]})`;
+      g.lineWidth = hov ? 1.6 : 0.7;
+      g.beginPath(); g.moveTo(cx, cy); g.lineTo(p[0], p[1]); g.stroke();
+    }
+  } else {
+    const maxW = g3.edges.length ? g3.edges[0][2] : 1;
+    for (const [a, b, wgt] of g3.edges) {
+      const pa = g3.nodes[a]._p, pb = g3.nodes[b]._p;
+      const hov = g3.hover === g3.nodes[a] || g3.hover === g3.nodes[b];
+      g.strokeStyle = hov ? "#c98500" : `rgba(137,135,129,${0.07 + 0.20 * (wgt / maxW)})`;
+      g.lineWidth = hov ? 1.2 : 0.4;
+      g.beginPath(); g.moveTo(pa[0], pa[1]); g.lineTo(pb[0], pb[1]); g.stroke();
+    }
+  }
+  // nós — mais fundo primeiro
+  const sorted = [...pts].sort((a, b) => b.p[3] - a.p[3]);
+  g.font = "10px system-ui"; g.textAlign = "left";
+  const nlab = g3.mode === "ego" ? 8 : 1;
+  const top = new Set([...g3.nodes].sort((a, b) => b.rank - a.rank).slice(0, nlab));
+  for (const { n, p } of sorted) {
+    const hov = g3.hover === n;
+    g.fillStyle = n.center ? "#c98500" : (n.vt ? "#3987e5" : "#d95926");
+    if (hov || n.center) { g.shadowColor = n.center ? "rgba(201,133,0,.9)" : "#fff"; g.shadowBlur = n.center ? 14 : 8; }
+    g.beginPath(); g.arc(p[0], p[1], n.size * p[2] * (hov ? 1.5 : 1), 0, 7); g.fill();
+    g.shadowBlur = 0;
+    if (top.has(n) || hov) {
+      g.fillStyle = hov ? "#ffffff" : "#c3c2b7";
+      g.fillText(n.lab, p[0] + 7, p[1] + 3);
+    }
+  }
+  // núcleo do ego = verso atual ou a busca
+  if (g3.mode === "ego" && g3.centerLab) {
+    g.shadowColor = "rgba(201,133,0,.9)"; g.shadowBlur = 12;
+    g.fillStyle = "#c98500";
+    g.beginPath(); g.arc(cx, cy, 7, 0, 7); g.fill();
+    g.shadowBlur = 0;
+    g.fillStyle = "#ffffff"; g.font = "bold 11px system-ui"; g.textAlign = "center";
+    g.fillText(g3.centerLab, cx, cy - 13);
+  }
+  // timeline na base — só quando o eixo 2D NÃO está visível; se está,
+  // a timeline é o próprio eixo 2D da seção (hover marca A/B lá)
+  if ($("pane2d").clientWidth) return;
+  const inset = 14;
+  const sw = w - inset * 2, sy = h - 16;
+  const Nc = CHAPTERS.length;
+  const key = `${w}|${ORDER}`;
+  if (g3.stripKey !== key) {
+    const s = document.createElement("canvas");
+    s.width = Math.max(2, Math.round(sw * dpr)); s.height = Math.round(3 * dpr);
+    const sg = s.getContext("2d");
+    for (let i = 0; i < Nc; i++) {
+      sg.fillStyle = CHAPTERS[i].t === "VT" ? "rgba(57,135,229,.55)" : "rgba(217,89,38,.55)";
+      sg.fillRect((i / Nc) * s.width, 0, Math.max(s.width / Nc, 1), s.height);
+    }
+    g3.strip = s; g3.stripKey = key;
+  }
+  g.drawImage(g3.strip, inset, sy, sw, 3);
+  const mark = (ci, color, lab) => {
+    if (ci == null) return;
+    const x = inset + ((ci + 0.5) / Nc) * sw;
+    g.fillStyle = color;
+    g.fillRect(x - 1, sy - 9, 2, 12);
+    g.beginPath(); g.arc(x, sy - 12, 2.6, 0, 7); g.fill();
+    if (lab) {
+      g.font = "9px system-ui"; g.textAlign = "center";
+      g.fillText(lab, Math.max(inset + 16, Math.min(w - inset - 16, x)), sy - 17);
+    }
+  };
+  if (cur) mark(CHIDX[cur.book + "." + cur.ch], "#ffffff");                       // ponto A
+  if (g3.hover) mark(CHIDX[g3.hover.ref[0] + "." + g3.hover.ref[1]], "#c98500",   // ponto B
+                     `${g3.hover.ref[0]} ${g3.hover.ref[1]}`);
+}
+function loop3d() {
+  if (!$("pane3d").clientWidth) { g3.raf = null; return; }
+  if (!g3.drag) g3.rotY += 0.0035;
+  draw3d();
+  g3.raf = requestAnimationFrame(loop3d);
+}
+function start3d() { if (!g3.raf) g3.raf = requestAnimationFrame(loop3d); }
+$("g3d").addEventListener("mousedown", e => { g3.drag = [e.clientX, e.clientY]; $("g3d").style.cursor = "grabbing"; });
+window.addEventListener("mouseup", () => { g3.drag = null; $("g3d").style.cursor = "grab"; });
+window.addEventListener("mousemove", e => {
+  if (g3.drag) {
+    g3.rotY += (e.clientX - g3.drag[0]) * 0.006;
+    g3.rotX += (e.clientY - g3.drag[1]) * 0.006;
+    g3.rotX = Math.max(-1.4, Math.min(1.4, g3.rotX));
+    g3.drag = [e.clientX, e.clientY];
+  }
+});
+$("g3d").addEventListener("wheel", e => {
+  e.preventDefault();
+  g3.zoom = Math.max(0.4, Math.min(3, g3.zoom * (e.deltaY < 0 ? 1.08 : 0.92)));
+}, { passive: false });
+$("g3d").addEventListener("mousemove", e => {
+  const r = $("g3d").getBoundingClientRect();
+  const mx = e.clientX - r.left, my = e.clientY - r.top;
+  let best = null, bd = 144;
+  for (const n of g3.nodes) {
+    if (!n._p) continue;
+    const d = (n._p[0]-mx)**2 + (n._p[1]-my)**2;
+    if (d < bd) { bd = d; best = n; }
+  }
+  if (best !== g3.hover && $("pane2d").clientWidth) { g3.hover = best; draw(); }
+  g3.hover = best;
+  $("g3d").style.cursor = best ? "pointer" : (g3.drag ? "grabbing" : "grab");
+  const tip = $("tip");
+  if (best) {
+    tip.innerHTML = best.tip();
+    tip.style.display = "block";
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - 320) + "px";
+    tip.style.top = (e.clientY - 34) + "px";
+  } else tip.style.display = "none";
+});
+$("g3d").addEventListener("mouseleave", () => { g3.hover = null; $("tip").style.display = "none"; });
+$("g3d").addEventListener("click", () => {
+  if (g3.hover) { const r = g3.hover.ref; jump(r[0], r[1], r[2]); }
+});
+
+/* tabs de view */
+function setView(v) {
+  [...$("viewtabs").children].forEach(b => b.classList.toggle("on", b.dataset.v === v));
+  $("arcbox").className = v;
+  applyFly();
+  bgCanvas = null; g3.stripKey = null; draw(); draw3d(); start3d();
+}
+for (const btn of $("viewtabs").children)
+  btn.onclick = () => setView(btn.dataset.v);
+for (const btn of $("ordertabs").children)
+  btn.onclick = () => setOrder(btn.dataset.o);
+
+/* layouts: leitura | padrão | grafo L | sem grafo */
+let LAYOUT = "padrao";
+function applyLayout(name) {
+  LAYOUT = name;
+  document.body.className = "layout-" + name;
+  try { localStorage.setItem("mob_layout", name); } catch {}
+  [...$("laytabs").children].forEach(b => b.classList.toggle("on", b.dataset.l === name));
+  const p = $("pane3d");
+  if (name === "grafo") {
+    document.querySelector("main").prepend(p);   // 3D vira coluna lateral → L
+    setView("v2d");
+  } else if (p.parentElement !== $("arcbox")) {
+    $("arcbox").appendChild(p);
+  }
+  bgCanvas = null; g3.stripKey = null;
+  applyFly(); draw(); draw3d(); start3d(); focusVerse();
+}
+for (const btn of $("laytabs").children)
+  btn.onclick = () => applyLayout(btn.dataset.l);
+
+/* flyout 3D arrastável (modo 2D+3D): contido na seção do grafo;
+   o limite é imaginário — só o clamp, nada visível */
+const fly = { x: null, y: null, d: 300, drag: null };
+function applyFly() {
+  const p = $("pane3d"), box = $("arcbox");
+  if (box.className !== "vsplit") { p.style.left = p.style.top = ""; return; }
+  const W = box.clientWidth, H = box.clientHeight;
+  fly.d = Math.max(200, Math.min(400, Math.round(H * 0.94)));
+  if (fly.x == null) { fly.x = W - fly.d / 2 - 40; fly.y = H / 2; }
+  const r = fly.d / 2;
+  fly.x = Math.max(r, Math.min(W - r, fly.x));
+  fly.y = H > fly.d ? Math.max(r, Math.min(H - r, fly.y)) : H / 2;
+  p.style.setProperty("--flyd", fly.d + "px");
+  p.style.left = (fly.x - fly.d / 2) + "px";
+  p.style.top = (fly.y - fly.d / 2) + "px";
+}
+$("flyhandle").addEventListener("mousedown", e => {
+  const rect = $("arcbox").getBoundingClientRect();
+  fly.drag = [e.clientX - rect.left - fly.x, e.clientY - rect.top - fly.y];
+  e.preventDefault(); e.stopPropagation();
+});
+window.addEventListener("mousemove", e => {
+  if (fly.drag) {
+    const rect = $("arcbox").getBoundingClientRect();
+    fly.x = e.clientX - rect.left - fly.drag[0];
+    fly.y = e.clientY - rect.top - fly.drag[1];
+    applyFly();
+  }
+});
+window.addEventListener("mouseup", () => { fly.drag = null; });
+
+/* ================= leitor / crawl ================= */
+function agreeColor(a) { return RAMP[Math.max(0, Math.min(RAMP.length - 1, Math.floor(a * RAMP.length)))]; }
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+function refLabel(b, c, v) {
+  const nb = META.books.find(x => x.code === b);
+  return `${nb ? nb.name : b} ${c}` + (v ? `:${v}` : "");
+}
+async function loadChapter(book, ch) {
+  [chapterData, chapterNotes] = await Promise.all([
+    api(`/api/chapter?book=${book}&ch=${ch}`),
+    notesGet(book, ch),
+  ]);
+  renderChapter();
+}
+function renderChapter() {
+  const { book, ch } = chapterData;
+  const hasNote = chapterNotes.chapter || Object.keys(chapterNotes.verses).length;
+  $("chlabel").innerHTML = esc(refLabel(book, ch)) + (hasNote ? '<span class="notedot" title="há notas neste capítulo"></span>' : "");
+  const box = $("verses");
+  box.innerHTML = "";
+  for (const v of chapterData.verses) {
+    const d = document.createElement("div");
+    d.className = "vs"; d.dataset.v = v.v;
+    const vn = chapterNotes.verses[String(v.v)] ? '<span class="vnote" title="nota">●</span> ' : "";
+    d.innerHTML = `<div class="num">${vn}${v.v}</div><div class="tx">${esc(v.text)}</div>
+      <div class="badges"><span class="dotA" title="consenso ${v.agreement}"
+        style="background:${agreeColor(v.agreement)}"></span>
+        <span class="nx">${v.nx ? "⟡" + v.nx : ""}</span></div>`;
+    d.onclick = () => go(v.v ? { book, ch, v: v.v } : cur);
+    box.appendChild(d);
+  }
+}
+function focusVerse() {
+  if (!cur) return;
+  const box = $("verses"), rows = [...box.children];
+  const i = rows.findIndex(r => +r.dataset.v === cur.v);
+  if (i < 0) return;
+  rows.forEach((r, j) => {
+    const d = Math.abs(j - i);
+    r.classList.toggle("cur", j === i);
+    r.style.opacity = j === i ? 1 : Math.max(0.16, 0.75 - d * 0.13);
+    r.style.filter = j === i ? "none" : `blur(${Math.min(d * 0.16, 0.8)}px)`;
+    r.style.transform = j === i ? "none" : `rotateX(${j < i ? 9 : -9}deg) scale(${Math.max(0.86, 1 - d * 0.018)})`;
+  });
+  const y = rows[i].offsetTop + rows[i].offsetHeight / 2 - $("crawl").clientHeight / 2;
+  box.style.transform = `translateY(${-y}px)`;
+}
+
+/* ================= verso / HUD ================= */
+async function loadVerse() {
+  verseData = await api(`/api/verse?book=${cur.book}&ch=${cur.ch}&v=${cur.v}`);
+  const s = verseData.sot;
+  $("bigref").textContent = refLabel(cur.book, cur.ch, cur.v);
+  if (s) {
+    $("meterfill").style.width = Math.round(s.agreement * 100) + "%";
+    $("meterfill").style.background = agreeColor(s.agreement);
+    $("meterval").textContent = (s.agreement * 100).toFixed(0) + "%";
+    const missing = s.missing ? s.missing.split(",") : [];
+    $("presence").innerHTML =
+      `<span class="chip origin">origem: ${s.origin}</span>` +
+      `<span class="chip">presente em ${s.n_versions}/${META.totals.translations}</span>` +
+      missing.map(m => `<span class="chip miss">sem ${m}</span>`).join("");
+  }
+  $("ncon").textContent = verseData.links.length ? `· ${verseData.links.length}` : "";
+  $("links").innerHTML = verseData.links.length ? verseData.links.map((l, i) =>
+    `<div class="link" data-i="${i}">
+       <span class="dir ${l.dir}">${l.dir === "out" ? "→" : "←"}</span>
+       <span class="lref">${l.name} ${l.c}:${l.v}${l.ve ? "-" + l.ve : ""}</span>
+       <span class="lsn">${esc(l.snippet)}</span>
+       <span class="votes">${l.votes}</span></div>`).join("")
+    : `<div class="empty">nenhuma conexão registrada para este verso</div>`;
+  [...$("links").children].forEach(el => {
+    if (el.dataset.i == null) return;
+    el.onclick = () => { const l = verseData.links[+el.dataset.i]; jump(l.b, l.c, l.v); };
+  });
+  $("versions").innerHTML = verseData.versions.map(v =>
+    `<div class="ver"><span class="t">${v.trans}</span>${esc(v.text)}</div>`).join("");
+  renderNotes();
+  build3d(); draw();
+}
+
+/* ================= notas — storage local (app) ou navegador (demo) ===== */
+let NOTES_LOCAL = false;               // true no demo público: localStorage
+function lsAll() { try { return JSON.parse(localStorage.getItem("mob_notes") || "{}"); } catch { return {}; } }
+function lsSave(all) { localStorage.setItem("mob_notes", JSON.stringify(all)); }
+async function notesGet(book, ch) {
+  if (!NOTES_LOCAL) return api(`/api/notes?book=${book}&ch=${ch}`);
+  const out = { chapter: null, verses: {} };
+  for (const [k, t] of Object.entries(lsAll())) {
+    const [b, c, v] = k.split(".");
+    if (b === book && +c === ch) { if (+v === 0) out.chapter = t; else out.verses[v] = t; }
+  }
+  return out;
+}
+async function notesSet(book, ch, v, text) {
+  if (!NOTES_LOCAL) return post("/api/note", { book, ch, v, text });
+  const all = lsAll(), k = `${book}.${ch}.${v}`;
+  if (text.trim()) all[k] = text; else delete all[k];
+  lsSave(all);
+}
+async function notesMapFetch() {
+  if (!NOTES_LOCAL) return api("/api/note_map");
+  return [...new Set(Object.keys(lsAll()).map(k => k.split(".").slice(0, 2).join(".")))].sort();
+}
+$("nbackup").onclick = async () => {
+  const all = NOTES_LOCAL ? lsAll() : await api("/api/notes_all");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(all, null, 2)], { type: "application/json" }));
+  a.download = "myownbible-notas.json";
+  a.click(); URL.revokeObjectURL(a.href);
+};
+$("nrestore").onclick = () => $("nfile").click();
+$("nfile").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  const all = JSON.parse(await f.text());
+  for (const [k, text] of Object.entries(all)) {
+    const [b, c, v] = k.split(".");
+    await notesSet(b, +c, +v, text);
+  }
+  noteMap = new Set(await notesMapFetch());
+  if (cur) { chapterNotes = await notesGet(cur.book, cur.ch); renderChapter(); focusVerse(); renderNotes(); }
+  draw();
+  $("notestate").textContent = "notas restauradas ✓";
+  setTimeout(() => $("notestate").textContent = "", 2000);
+  e.target.value = "";
+};
+
+/* ================= notas ================= */
+function renderNotes() {
+  $("nvref").textContent = refLabel(cur.book, cur.ch, cur.v);
+  $("ncref").textContent = refLabel(cur.book, cur.ch);
+  $("noteV").value = chapterNotes.verses[String(cur.v)] || "";
+  $("noteC").value = chapterNotes.chapter || "";
+}
+async function saveNote(kind) {
+  const v = kind === "v" ? cur.v : 0;
+  const text = (kind === "v" ? $("noteV") : $("noteC")).value;
+  const prev = kind === "v" ? (chapterNotes.verses[String(cur.v)] || "") : (chapterNotes.chapter || "");
+  if (text === prev) return;
+  $("notestate").textContent = "salvando…";
+  await notesSet(cur.book, cur.ch, v, text);
+  if (kind === "v") {
+    if (text.trim()) chapterNotes.verses[String(cur.v)] = text;
+    else delete chapterNotes.verses[String(cur.v)];
+  } else chapterNotes.chapter = text.trim() ? text : null;
+  noteMap = new Set(await notesMapFetch());
+  $("notestate").textContent = "salvo ✓";
+  setTimeout(() => $("notestate").textContent = "", 1600);
+  renderChapter(); focusVerse(); draw();
+}
+$("noteV").addEventListener("blur", () => saveNote("v"));
+$("noteC").addEventListener("blur", () => saveNote("c"));
+for (const id of ["noteV", "noteC"])
+  $(id).addEventListener("keydown", e => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") e.target.blur();
+    e.stopPropagation();
+  });
+
+/* ================= trilha (breadcrumb de saltos) ================= */
+let trail = [], pos = -1;
+function renderTrail() {
+  $("tl").innerHTML = trail.map((t, i) => {
+    const lab = t[0] === "#Q" ? `busca: “${t[1]}”` : refLabel(t[0], t[1], t[2]);
+    return `<span class="tld ${i === pos ? "cur" : ""}" data-i="${i}" title="${esc(lab)}"><i></i></span>`;
+  }).join("");
+  [...$("tl").children].forEach(el => el.onclick = () => trailGo(+el.dataset.i));
+  const curEl = $("tl").children[pos];
+  if (curEl) curEl.scrollIntoView({ inline: "center", block: "nearest" });
+  $("tlcur").textContent = trail.length > 1 ? `${pos + 1}/${trail.length}` : "";
+  $("back").disabled = pos <= 0;
+  $("next").disabled = pos >= trail.length - 1;
+  $("home").disabled = trail.length === 0;   // no ponto 0, 2º clique limpa tudo
+  $("home2").disabled = trail.length === 0;
+}
+function trailGo(i) {
+  if (i < 0 || i >= trail.length) return;
+  pos = i;
+  const t = trail[i];
+  if (t[0] === "#Q") queryMode(t[1], true);
+  else go({ book: t[0], ch: t[1], v: t[2] }, { fromTrail: true });
+}
+function jump(b, c, v) {
+  // o ponto atual (onde parei de ler) já está gravado em trail[pos];
+  // corta o futuro e empilha o novo destino
+  trail = trail.slice(0, pos + 1);
+  trail.push([b, c, v]);
+  pos = trail.length - 1;
+  go({ book: b, ch: c, v }, { fromTrail: true });
+}
+const goHome = () => {
+  if (pos > 0) trailGo(0);          // 1º clique: volta ao ponto 0 (ex.: o search result)
+  else zeroState();                  // 2º clique (já no ponto 0): limpa tudo — estado zero
+};
+$("home").onclick = goHome;
+$("home2").onclick = goHome;
+$("back").onclick = () => trailGo(pos - 1);
+$("next").onclick = () => trailGo(pos + 1);
+
+/* ================= estado zero ================= */
+function zeroState() {
+  trail = []; pos = -1; cur = null; verseData = null; chapterData = null;
+  queryCtx = null;
+  $("crawl").classList.remove("list");
+  $("verses").classList.remove("list");
+  chapterNotes = { chapter: null, verses: {} };
+  $("q").value = ""; $("sugg").style.display = "none";
+  history.replaceState(null, "", location.pathname);
+  $("zerocta").classList.add("on");
+  $("verses").innerHTML = "";
+  $("chlabel").textContent = "—";
+  $("bigref").textContent = "Bíblia inteira";
+  $("meterfill").style.width = 0;
+  $("meterval").textContent = "—";
+  const [cb, cc] = META.center.chapter;
+  const [vb, vc, vv] = META.center.verse;
+  $("presence").innerHTML =
+    `<span class="chip origin">centro: ${refLabel(cb, cc)} · ${refLabel(vb, vc, vv)}</span>` +
+    `<span class="chip">${META.totals.verses.toLocaleString("pt-BR")} versos</span>` +
+    `<span class="chip">${META.totals.crossrefs.toLocaleString("pt-BR")} conexões</span>`;
+  $("ncon").textContent = "";
+  $("links").innerHTML = `<div class="empty">estado zero — comece a leitura ou faça uma busca</div>`;
+  $("versions").innerHTML = "";
+  $("notesPanel").style.display = "none";
+  renderTrail();
+  hoverArc = null; draw();
+  build3dWhole(); draw3d(); start3d();
+}
+/* ================= busca ao centro do grafo ================= */
+async function queryMode(q, fromTrail = false) {
+  const data = await api(`/api/query_center?q=${encodeURIComponent(q)}`);
+  queryCtx = data;
+  cur = null; verseData = null; chapterData = null;
+  chapterNotes = { chapter: null, verses: {} };
+  if (!fromTrail) {
+    trail = trail.slice(0, pos + 1);
+    trail.push(["#Q", q]);
+    pos = trail.length - 1;
+  }
+  location.hash = "q/" + encodeURIComponent(q);
+  $("zerocta").classList.remove("on");
+  $("notesPanel").style.display = "none";
+  $("crawl").classList.add("list");
+  $("verses").classList.add("list");
+  $("chlabel").textContent = `busca: “${q}”`;
+  const rows = data.matches.map((m, i) =>
+    `<div class="vs" data-i="${i}" style="opacity:.92">
+       <div class="num">→</div>
+       <div class="tx"><b>${m.label}</b> — ${m.snippet}</div>
+       <div class="badges"><span class="nx">${m.kind}</span></div></div>`).join("");
+  $("verses").innerHTML = rows ||
+    `<div class="empty" style="padding:20px">nenhuma ocorrência encontrada</div>`;
+  const onpick = el => {
+    if (el.dataset.i == null) return;
+    el.onclick = () => { const m = data.matches[+el.dataset.i]; jump(m.ref[0], m.ref[1], m.ref[2]); };
+  };
+  [...$("verses").children].forEach(onpick);
+  $("bigref").textContent = `“${q}”`;
+  $("meterfill").style.width = 0;
+  $("meterval").textContent = "—";
+  $("presence").innerHTML =
+    `<span class="chip origin">busca ao centro do grafo</span>` +
+    `<span class="chip">${data.total} ocorrência${data.total === 1 ? "" : "s"} literais</span>` +
+    `<span class="chip">${data.matches.length} nós no grafo</span>`;
+  $("ncon").textContent = data.matches.length ? `· ${data.matches.length}` : "";
+  $("links").innerHTML = data.matches.map((m, i) =>
+    `<div class="link" data-i="${i}"><span class="dir">→</span>
+     <span class="lref">${m.label}</span><span class="lsn">${m.snippet}</span>
+     <span class="votes">${m.kind === "texto" ? "txt" : "sem"}</span></div>`).join("")
+    || `<div class="empty">nenhuma ocorrência</div>`;
+  [...$("links").children].forEach(onpick);
+  $("versions").innerHTML = "";
+  renderTrail();
+  hoverArc = null; draw();
+  build3dQuery(); draw3d(); start3d();
+}
+
+$("ctastart").onclick = () => jump("GEN", 1, 1);
+$("ctacenter").onclick = () => {
+  const [vb, vc, vv] = META.center.verse;
+  jump(vb, vc, vv);
+};
+
+/* ================= navegação ================= */
+async function go(ref, { fromTrail = false } = {}) {
+  queryCtx = null;
+  $("crawl").classList.remove("list");
+  $("verses").classList.remove("list");
+  $("zerocta").classList.remove("on");
+  $("notesPanel").style.display = "";
+  const sameCh = chapterData && cur && cur.book === ref.book && cur.ch === ref.ch;
+  cur = { ...ref };
+  location.hash = `${cur.book}/${cur.ch}/${cur.v}`;
+  if (!sameCh) await loadChapter(cur.book, cur.ch);
+  focusVerse();
+  if (!fromTrail && pos >= 0) trail[pos] = [cur.book, cur.ch, cur.v];  // a entrada atual me segue
+  renderTrail();
+  await loadVerse();
+}
+function step(dir) {
+  if (!cur || !chapterData) return;
+  const vs = chapterData.verses.map(x => x.v);
+  const i = vs.indexOf(cur.v) + dir;
+  if (i >= 0 && i < vs.length) return go({ book: cur.book, ch: cur.ch, v: vs[i] });
+  const ci = CHIDX[cur.book + "." + cur.ch] + dir;
+  if (ci < 0 || ci >= CHAPTERS.length) return;
+  const c = CHAPTERS[ci];
+  api(`/api/chapter?book=${c.book}&ch=${c.ch}`).then(d => {
+    const v = dir > 0 ? d.verses[0].v : d.verses[d.verses.length - 1].v;
+    go({ book: c.book, ch: c.ch, v });
+  });
+}
+document.addEventListener("keydown", e => {
+  if (e.target === $("q") || e.target.tagName === "TEXTAREA") return;
+  if (e.key === "ArrowDown") { e.preventDefault(); step(1); }
+  if (e.key === "ArrowUp") { e.preventDefault(); step(-1); }
+  if (e.key === "ArrowRight") { e.preventDefault(); trailGo(pos + 1); }
+  if (e.key === "ArrowLeft") { e.preventDefault(); trailGo(pos - 1); }
+  if (e.key === "Home") { e.preventDefault(); trailGo(0); }
+});
+
+/* ================= busca ================= */
+let selIdx = -1, suggs = [], debounce;
+$("q").addEventListener("input", () => {
+  clearTimeout(debounce);
+  const q = $("q").value.trim();
+  if (!q) { $("sugg").style.display = "none"; return; }
+  debounce = setTimeout(async () => {
+    suggs = await api(`/api/search?q=${encodeURIComponent(q)}`);
+    // opção "busca ao centro": logo após as sugestões de referência
+    if (q.length >= 3) {
+      const nref = suggs.filter(s => s.kind === "ref").length;
+      suggs.splice(nref, 0, { kind: "centro", q,
+        label: `🎯 “${q}”`, snippet: "deixar a busca ao centro do grafo — todas as ocorrências" });
+    }
+    selIdx = -1;
+    $("sugg").innerHTML = suggs.map((s, i) =>
+      `<div class="sg" data-i="${i}"><span class="ref">${s.label}</span>
+       <span class="sn">${s.snippet}</span><span class="kind">${s.kind}</span></div>`).join("")
+      || `<div class="sg"><span class="sn">nada encontrado</span></div>`;
+    $("sugg").style.display = "block";
+    [...$("sugg").children].forEach(el => el.onclick = () => pick(+el.dataset.i));
+  }, 160);
+});
+function pick(i) {
+  const s = suggs[i]; if (!s) return;
+  $("sugg").style.display = "none"; $("q").blur();
+  if (s.kind === "centro") queryMode(s.q);
+  else jump(s.ref[0], s.ref[1], s.ref[2]);
+}
+$("q").addEventListener("keydown", e => {
+  if (e.key === "ArrowDown") { selIdx = Math.min(selIdx + 1, suggs.length - 1); mark(); e.preventDefault(); }
+  else if (e.key === "ArrowUp") { selIdx = Math.max(selIdx - 1, 0); mark(); e.preventDefault(); }
+  else if (e.key === "Enter") pick(selIdx >= 0 ? selIdx : 0);
+  else if (e.key === "Escape") $("sugg").style.display = "none";
+});
+function mark() { [...$("sugg").children].forEach((el, i) => el.classList.toggle("sel", i === selIdx)); }
+document.addEventListener("click", e => { if (!e.target.closest(".searchwrap")) $("sugg").style.display = "none"; });
+
+$("vtoggle").onclick = () => {
+  const v = $("versions");
+  const show = v.style.display === "none";
+  v.style.display = show ? "block" : "none";
+  $("vtoggle").textContent = show ? "ocultar" : "mostrar";
+};
+
+/* ================= init ================= */
+window.addEventListener("resize", () => { bgCanvas = null; g3.stripKey = null; applyFly(); draw(); draw3d(); focusVerse(); });
+(async () => {
+  META = await api("/api/meta");
+  NOTES_LOCAL = !!META.demo;           // demo público: notas ficam no navegador
+  noteMap = new Set(await notesMapFetch());
+  buildAxis();
+  const t = META.totals;
+  $("stats").innerHTML = `<span><b>${t.verses.toLocaleString("pt-BR")}</b> versos</span>
+    <span><b>${t.crossrefs.toLocaleString("pt-BR")}</b> conexões</span>
+    <span><b>${t.translations}</b> versões</span>` +
+    (META.demo ? `<span style="color:var(--hl)" title="demo com traduções de domínio público; notas ficam no seu navegador">DEMO</span>` : "");
+  $("ntrans").textContent = t.translations;
+  let saved = "padrao";
+  try { saved = localStorage.getItem("mob_layout") || "padrao"; } catch {}
+  applyLayout(saved);
+  const view3d = () => { if (LAYOUT !== "grafo" && LAYOUT !== "nografo") setView("v3d"); };
+  const h = location.hash.slice(1).split("/");
+  if (h[0] === "q" && h[1]) {
+    const q = decodeURIComponent(h[1]);
+    view3d();
+    trail = [["#Q", q]]; pos = 0;
+    await queryMode(q, true);
+  } else if (h.length === 3 && h[0]) {
+    trail = [[h[0], +h[1], +h[2]]]; pos = 0;
+    draw();
+    await go({ book: h[0], ch: +h[1], v: +h[2] }, { fromTrail: true });
+  } else {
+    view3d();                 // abertura: a bíblia inteira em 3D
+    zeroState();
+  }
+})();
+</script>
+</body>
+</html>
