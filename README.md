@@ -24,19 +24,30 @@ onde cada trecho se conecta com o resto do cânon.</strong></div>
   traduções são comparadas e vence a redação *medoid* (a mais próxima de todas).
   Nada é gerado: cada verso é cópia literal de UMA tradução, com origem, score
   de consenso e ausências rastreáveis (os "pontos exclusivos", ex.: Atos 8:37).
-- **Grafo navegável** — arco 2D estilo *chord* dos 1.189 capítulos + ego-rede 3D
-  do verso atual (órbita interna = matches exatos, externa = matches de sentido).
-  Hover mostra origem⇄destino; clique navega.
+- **Grafo-constelação** — arco 2D dos 1.189 capítulos (com zoom até 40×) + um grafo
+  3D onde **cada versículo desenha sua própria figura**: distância ao centro = força
+  da conexão, latitude = posição no cânon, ângulo = sequência áurea perturbada por
+  constantes derivadas do hash da referência. É determinístico — a mesma passagem
+  gera sempre a mesma constelação — e alterna entre ✦ limpa e ◍ sobre a esfera
+  da Bíblia inteira.
 - **Duas linhas do tempo** — ordem canônica ou cronológica≈ (Jó primeiro,
   profetas intercalados com Reis, cartas do NT por composição).
 - **Busca dupla** — autocomplete por referência (`jo 3:16`, `sl 23`) e texto
   (FTS5), ou 🎯 *busca ao centro do grafo*: a query vira o nó central com camadas
   separadas de **frase exata** vs **sentido** (embeddings locais).
+- **Notas por trecho** — selecione vários versículos (long-press ou ⌖, como no
+  WhatsApp) e anote o grupo. Trechos **se sobrepõem**: Salmos 99:1-10 e 99:7-8
+  coexistem com datas próprias. O texto mostra só barras coloridas; clicar abre
+  as notas que cobrem aquele verso, da mais específica para a mais ampla.
 - **Leitor em crawl** com breadcrumb de saltos (back volta ao verso onde você
-  parou), notas pessoais por capítulo/verso, 4 layouts (leitura · padrão ·
-  grafo L · sem grafo).
-- **Curiosidade calculada do grafo**: o capítulo mais conectado da Bíblia é
-  Salmos 119 (3.940 conexões) e o verso mais conectado é Isaías 9:6 (238).
+  parou), teleprompter (tamanho da letra + play/pause com velocidade) e layout
+  único em L.
+- **Mobile-first** — tab bar iOS-like (Ler · Grafo · Notas), swipe entre abas,
+  pinça para zoom nos dois grafos e, no retrato, a timeline vira uma faixa
+  vertical à esquerda.
+- **Duas curiosidades calculadas do grafo** (métricas independentes, não um par):
+  o **capítulo** mais conectado é Salmos 119, somando 3.940 conexões dos seus 176
+  versos; o **versículo** mais conectado é Isaías 9:6, com 238.
 
 ![views: busca ao centro, flyout 3D, layout grafo L, ordem cronológica](docs/views.gif)
 
@@ -81,6 +92,7 @@ scripts/embed_index.py  indexação de embeddings em lote, retomável
 server.py               API http.server (stdlib): /api/meta /search /chapter
                         /verse /query_center /semantic /notes
 web/index.html          UI completa num arquivo: canvas 2D/3D, crawl, HUD — zero deps
+.temp/refresh_graph.sh  regenera um mapa do próprio código (gitignored)
 ```
 
 Nenhum framework, nenhum bundler, nenhum `npm install` — o app inteiro é
