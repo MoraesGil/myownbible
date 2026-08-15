@@ -42,9 +42,17 @@ def main() -> None:
              "UNION ALL SELECT dst_book, dst_ch FROM crossrefs) GROUP BY book, ch ORDER BY n DESC LIMIT 1")
     cv = q1("SELECT book, ch, v, count(*) n FROM (SELECT src_book book, src_ch ch, src_v v FROM crossrefs "
             "UNION ALL SELECT dst_book, dst_ch, dst_v FROM crossrefs) GROUP BY book, ch, v ORDER BY n DESC LIMIT 1")
+    ccv = con.execute(
+        "SELECT v, count(*) n FROM ("
+        " SELECT src_v v FROM crossrefs WHERE src_book=? AND src_ch=?"
+        " UNION ALL SELECT dst_v FROM crossrefs WHERE dst_book=? AND dst_ch=?)"
+        " GROUP BY v ORDER BY n DESC LIMIT 1",
+        (cch["book"], cch["ch"], cch["book"], cch["ch"])).fetchone()
     meta = {
         "books": books, "bg_edges": edges, "demo": True,
         "center": {"chapter": [cch["book"], cch["ch"]], "n": cch["n"],
+                   "chapter_verse": [cch["book"], cch["ch"], ccv["v"]],
+                   "chapter_verse_n": ccv["n"],
                    "verse": [cv["book"], cv["ch"], cv["v"]], "verse_n": cv["n"]},
         "totals": {"verses": q1("SELECT count(*) c FROM sot")["c"],
                    "crossrefs": q1("SELECT count(*) c FROM crossrefs")["c"],

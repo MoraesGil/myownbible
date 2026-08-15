@@ -944,7 +944,7 @@ const GOLDEN = 0.6180339887498949;
 function build3dSphere() {
   const N = CHAPTERS.length;
   const [cb, cc] = META.center.chapter;
-  const cvRef = META.center.chapter_verse;
+  const cvRef = META.center.chapter_verse || [cb, cc, 1];
   const maxN = Math.max(...CHAPTERS.map(c => c.n));
   const nodes = CHAPTERS.map((c, i) => {
     const t = i / (N - 1);
@@ -962,7 +962,7 @@ function build3dSphere() {
           ref: META.center.chapter_verse,
           lab: `☉ ${cvRef[0]} ${cvRef[1]}:${cvRef[2]}`,
           tip: () => `<b>${refLabel(cvRef[0], cvRef[1], cvRef[2])}</b> — o versículo mais conectado do capítulo mais conectado da bíblia` +
-            ` (${META.center.chapter_verse_n} conexões próprias; o capítulo soma ${META.center.n.toLocaleString("pt-BR")})` }
+            ` (${META.center.chapter_verse_n || "?"} conexões próprias; o capítulo soma ${META.center.n.toLocaleString("pt-BR")})` }
       : { ...base, x: rr * Math.cos(th), y, z: rr * Math.sin(th),
           size: 1.1 + 2.6 * (c.n / maxN) };
   });
