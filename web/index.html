@@ -87,6 +87,10 @@
   #pane2d { position: absolute; inset: 0; }
   #pane3d { border-right: 1px solid var(--border); }
   /* toggle de estilo do 3D: ✦ constelação limpa · ◍ sobre a esfera */
+  #ordertabs {
+    position: absolute; top: 8px; right: 12px; z-index: 10; display: flex;
+    border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
   #g3style {
     position: absolute; top: 6px; right: 6px; z-index: 12; display: flex;
     border: 1px solid var(--border); border-radius: 7px; overflow: hidden;
@@ -247,6 +251,10 @@
   body:not(.hasverse) #notesPanel,
   body:not(.hasverse) #notesbtn,
   body:not(.hasverse) #selbtn { display: none !important; }
+  .vs.hov { background: rgba(201,133,0,.10); outline: 1px dashed rgba(201,133,0,.5); }
+  .link.hov { background: rgba(201,133,0,.16); outline: 1px solid var(--hl); }
+  #selref { color: var(--hl); font-weight: 600; font-size: 12px; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
   /* ---------- notas por trecho ---------- */
   #selbar {
     display: none; align-items: center; gap: 8px; padding: 6px 14px;
@@ -287,18 +295,18 @@
   #tabbar { grid-area: tabs; display: none; background: var(--surface);
     border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); z-index: 50; }
   #tabbar button {
-    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
     background: none; border: 0; color: var(--muted); font-size: 10px;
-    padding: 7px 0 5px; cursor: pointer; position: relative;
+    padding: 8px 0 6px; cursor: pointer; position: relative;
     -webkit-tap-highlight-color: transparent;
   }
-  #tabbar button span { font-size: 19px; line-height: 1; }
+  #tabbar button span { font-size: 20px; line-height: 1; }
   #tabbar button.on { color: var(--hl); }
   #tabbar .tdot { display: none; width: 6px; height: 6px; border-radius: 50%;
-    background: var(--hl); position: absolute; top: 4px; right: 50%; margin-right: -16px; }
+    background: var(--hl); position: absolute; top: 5px; right: 50%; margin-right: -17px; }
   body.hasnote #tabbar button[data-tab="notas"] .tdot { display: block; }
 
-  /* tablet: mesma topologia, mais apertada */
+  /* tablet */
   @media (max-width: 1023px) {
     body {
       grid-template-columns: minmax(150px,.6fr) minmax(0,2fr) minmax(240px,1fr);
@@ -309,47 +317,79 @@
     header { gap: 10px; padding: 8px 12px; }
   }
 
-  /* mobile: tab bar + views comutadas por body[data-tab] */
+  /* ---------------- mobile ---------------- */
   @media (max-width: 767px) {
+    body { overflow-x: hidden; }
     #tabbar { display: flex; }
-    #vsplitter, .legend, #ordertabs, #hint, .stats { display: none; }
-    #q { font-size: 16px; }                     /* evita o zoom automático do Safari */
-    .tld i { width: 13px; height: 13px; }
+    #vsplitter, .legend, #hint, .stats, #ordertabs { display: none; }
+    /* header enxuto: logo curto + busca; a navegação vive no crawlhead */
+    header { gap: 8px; padding: 7px 10px; }
+    .logo { font-size: 12px; letter-spacing: .06em; }
+    #home, #back, #next { display: none; }
+    .searchwrap { max-width: none; }
+    #q { font-size: 16px; padding: 7px 10px; }
+    /* alvos de toque */
+    .navbtn { padding: 7px 12px; min-height: 34px; }
+    .tld { padding: 6px 0; }
+    .tld i { width: 14px; height: 14px; }
+    .tld + .tld::before { width: 10px; }
+    #readbar input[type=range] { width: auto; flex: 1; min-width: 0; height: 26px; }
+    #readbar { gap: 6px; padding: 5px 10px; }
+    #g3style button { padding: 7px 11px; font-size: 14px; }
+    .minibtn { padding: 6px 2px; }
     #tip { left: 8px !important; right: 8px !important; top: auto !important;
       bottom: calc(64px + env(safe-area-inset-bottom)) !important;
-      white-space: normal; text-align: center; }
-    #pane3d, #hud, #reader { display: none; }
+      white-space: normal; text-align: center; max-width: none; }
+    /* leitura mais confortável e sem vazar */
+    #crawl { padding: 0 12px; }
+    #verses { left: 12px; right: 12px; }
+    .vs { gap: 8px; padding: 8px 4px; }
+    .vs .num { min-width: 1.8em; }
+    #hud { padding: 10px 12px; max-width: 100vw; overflow-x: hidden; }
+    .link, .noteitem { flex-wrap: wrap; }
+    .link .lsn { flex-basis: 100%; }
+    .link .lref, .link .lsn, .noteitem .nprev { max-width: 100%; }
+    #chlabel { font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+    /* views por aba */
+    #pane3d, #hud, #reader { display: none; min-width: 0; }
     #pane3d { border: 0; }
     body[data-tab="ler"] #reader { display: flex; }
     body[data-tab="grafo"] #pane3d { display: block; }
     body[data-tab="notas"] #hud { display: flex; }
     body[data-tab="notas"] #hud > .panel:not(#notesPanel) { display: none; }
-    /* conexões vivem dentro da aba Ler, sob o texto */
-    body[data-tab="ler"] #hud { display: flex; grid-area: read; overflow: visible;
-      max-height: 34vh; border-top: 1px solid var(--border); }
-    body[data-tab="ler"] #hud > .panel:not(#linksPanel) { display: none; }
+    body[data-tab="notas"] #notesPanel { display: block; }
   }
   @media (max-width: 767px) and (orientation: landscape) {
     body {
       grid-template-columns: 1fr;
-      grid-template-rows: auto var(--arch, 30vh) minmax(0,1fr) calc(52px + env(safe-area-inset-bottom));
+      grid-template-rows: auto var(--arch, 26vh) minmax(0,1fr) calc(50px + env(safe-area-inset-bottom));
       grid-template-areas: "head" "arc" "read" "tabs";
     }
     #pane3d, #reader, #hud { grid-area: read; }
-    body[data-tab="ler"] #reader { display: flex; }
+    /* conexões viram uma faixa curta sob o texto */
+    body[data-tab="ler"] #hud { display: flex; position: fixed; left: 0; right: 0;
+      bottom: calc(50px + env(safe-area-inset-bottom)); max-height: 30vh;
+      background: var(--page); border-top: 1px solid var(--border); z-index: 20; }
+    body[data-tab="ler"] #hud > .panel:not(#linksPanel) { display: none; }
   }
   @media (max-width: 767px) and (orientation: portrait) {
     body {
-      grid-template-columns: 58px minmax(0,1fr);
-      grid-template-rows: auto minmax(0,1fr) calc(52px + env(safe-area-inset-bottom));
+      grid-template-columns: 52px minmax(0,1fr);
+      grid-template-rows: auto minmax(0,1fr) calc(50px + env(safe-area-inset-bottom));
       grid-template-areas: "head head" "arc read" "tabs tabs";
     }
     #arcbox { border-right: 1px solid var(--border); }
     #pane3d, #reader, #hud { grid-area: read; }
-    body[data-tab="ler"] #hud { position: fixed; left: 58px; right: 0;
-      bottom: calc(52px + env(safe-area-inset-bottom)); max-height: 30vh;
-      background: var(--page); z-index: 20; }
+    body[data-tab="ler"] #hud { display: flex; position: fixed; left: 52px; right: 0;
+      bottom: calc(50px + env(safe-area-inset-bottom)); max-height: 26vh;
+      background: var(--page); border-top: 1px solid var(--border); z-index: 20;
+      padding: 8px 10px; }
+    body[data-tab="ler"] #hud > .panel:not(#linksPanel) { display: none; }
+    body[data-tab="ler"] #crawl { padding-bottom: 27vh; }
+    #fadeTop { height: 34px; }
+    #fadeBot { height: 46px; }
   }
+
 </style>
 </head>
 <body data-palette="#3987e5,#d95926,#c98500">
@@ -372,7 +412,7 @@
     <span><i style="background:var(--nt)"></i>Novo Testamento</span>
     <span><i style="background:var(--hl)"></i>conexões do verso atual</span>
   </div>
-  <div id="ordertabs" style="position:absolute; top:8px; right:12px; z-index:10; display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden">
+  <div id="ordertabs">
     <button data-o="canon" class="on" title="ordem dos livros como no cânon (por gênero literário)">canônica</button>
     <button data-o="chrono" title="ordem aproximada dos eventos/escrita — datações são debatidas">cronológica≈</button>
   </div>
@@ -394,6 +434,7 @@
       <button class="navbtn" id="home2" title="1º clique: ponto 0 da trilha · 2º clique: limpa tudo">⌂</button>
       <div id="tlwrap"><div id="tl"></div><span id="tlcur"></span></div>
       <div id="chlabel">—</div>
+      <span id="selref"></span>
       <button class="navbtn" id="selbtn" title="selecionar trechos para anotar (ou segure um versículo)">⌖</button>
       <button class="navbtn" id="notesbtn" title="notas deste trecho (n)">📝</button>
       <span id="hint">↑↓ versos · ←→ trilha · segure um verso para selecionar</span>
@@ -487,6 +528,41 @@ let chapterData = null, verseData = null, chapterNotes = [];
 let noteMap = new Set();
 let bgCanvas = null, goldArcs = [], hoverArc = null;
 let queryCtx = null;                  // busca ao centro do grafo
+
+/* ================= store: uma fonte de verdade para a SELEÇÃO ==============
+   Vanilla (o app é zero-deps) mas com o mesmo contrato de um store: um estado,
+   um setter, e assinantes que reagem. Todos os componentes — timeline 2D,
+   grafo 3D, leitor, HUD e notas — leem daqui em vez de variáveis soltas. */
+const store = {
+  s: { ref: null, hover: null, mode: "zero" },   // ref = [book,ch,v] selecionado
+  subs: [],
+  sub(fn) { this.subs.push(fn); return fn; },
+  set(patch) {
+    const before = JSON.stringify(this.s);
+    Object.assign(this.s, patch);
+    if (JSON.stringify(this.s) !== before) for (const f of this.subs) f(this.s);
+  },
+  get sel() { return this.s.ref; },
+  isSel(b, c, v) {
+    const r = this.s.ref;
+    return !!r && r[0] === b && r[1] === c && (v == null || r[2] === v);
+  },
+};
+// assinantes: quem precisa se redesenhar quando a seleção muda
+store.sub(() => { draw(); draw3d(); });
+store.sub(st => {                       // o leitor reflete o hover do grafo
+  const h = st.hover;
+  for (const el of document.querySelectorAll("#verses .vs"))
+    el.classList.toggle("hov", !!h && cur && h[0] === cur.book && h[1] === cur.ch && +el.dataset.v === h[2]);
+  for (const el of document.querySelectorAll("#links .link"))
+    el.classList.toggle("hov", !!h && el.dataset.ref === h.join("."));
+});
+store.sub(st => {                       // rótulo global de contexto
+  const el = $("selref");
+  if (!el) return;
+  el.textContent = st.ref ? refLabel(st.ref[0], st.ref[1], st.ref[2])
+                          : (queryCtx ? `“${queryCtx.q}”` : "Bíblia inteira");
+});
 
 /* ================= eixo / 2D ================= */
 // ordem cronológica APROXIMADA dos eventos/escrita (datações são debatidas)
@@ -848,6 +924,7 @@ $("arc").addEventListener("pointercancel", () => { arcDrag = null; });
    referência (mesma passagem ⇒ mesma figura, sempre). */
 const g3 = {
   nodes: [], edges: [], mode: "whole", whole: null, dust: null, lab: "",
+  conn: null, from: null,
   rotY: 0, rotX: -0.25, zoom: 1, fit: 1, drag: null, hover: null, raf: null,
   anim: null, alphaWhole: 1,
 };
@@ -867,6 +944,7 @@ const GOLDEN = 0.6180339887498949;
 function build3dSphere() {
   const N = CHAPTERS.length;
   const [cb, cc] = META.center.chapter;
+  const cvRef = META.center.chapter_verse;
   const maxN = Math.max(...CHAPTERS.map(c => c.n));
   const nodes = CHAPTERS.map((c, i) => {
     const t = i / (N - 1);
@@ -881,8 +959,10 @@ function build3dSphere() {
     };
     return (c.book === cb && c.ch === cc)
       ? { ...base, x: 0, y: 0, z: 0, size: 8, center: true, rank: 1e9,
-          lab: `☉ ${c.book} ${c.ch}`,
-          tip: () => `<b>${c.name} ${c.ch}</b> · capítulo mais conectado da bíblia (${META.center.n.toLocaleString("pt-BR")} conexões)` }
+          ref: META.center.chapter_verse,
+          lab: `☉ ${cvRef[0]} ${cvRef[1]}:${cvRef[2]}`,
+          tip: () => `<b>${refLabel(cvRef[0], cvRef[1], cvRef[2])}</b> — o versículo mais conectado do capítulo mais conectado da bíblia` +
+            ` (${META.center.chapter_verse_n} conexões próprias; o capítulo soma ${META.center.n.toLocaleString("pt-BR")})` }
       : { ...base, x: rr * Math.cos(th), y, z: rr * Math.sin(th),
           size: 1.1 + 2.6 * (c.n / maxN) };
   });
@@ -969,7 +1049,10 @@ function setNodes(nodes, spawn) {
   g3.anim = { t0: performance.now(), dur: 420 };
 }
 
-/* decide o modo pelo estado e (re)constrói — um ponto de entrada só */
+/* decide o modo pelo estado e (re)constrói — um ponto de entrada só.
+   ✦ clean  → constelação ego (figura própria do versículo)
+   ◍ globo  → os MESMOS versículos ocupam a posição real do seu capítulo na
+              esfera; a esfera inteira continua clicável e hoverable. */
 function rebuild3d() {
   if (!META || !g3.whole) return;
   let items = null, lab = "";
@@ -979,7 +1062,7 @@ function rebuild3d() {
       const k = `${l.b}.${l.c}.${l.v}`;
       const p = seen.get(k);
       if (p) { p.votes = Math.max(p.votes, l.votes); continue; }
-      seen.set(k, { ref: [l.b, l.c, l.v], votes: l.votes, dir: l.dir,
+      seen.set(k, { ref: [l.b, l.c, l.v], votes: l.votes, dir: l.dir, name: l.name,
         tip: () => `<b>${refLabel(cur.book, cur.ch, cur.v)}</b> ${l.dir === "out" ? "→" : "←"} <b>${l.name} ${l.c}:${l.v}</b> · ${l.votes} votos` });
     }
     items = [...seen.values()];
@@ -987,21 +1070,64 @@ function rebuild3d() {
   } else if (queryCtx && queryCtx.matches.length) {
     items = queryCtx.matches.map((m, i) => ({
       ref: m.ref, votes: m.kind === "texto" ? 100 : 40 - Math.min(35, i),
-      dir: "out",
+      dir: "out", name: m.label,
       tip: () => `<b>“${queryCtx.q}”</b> → <b>${m.label}</b> · ` +
         (m.kind === "texto" ? "frase exata" : "sentido próximo"),
     }));
     lab = `“${queryCtx.q}”`;
   }
-  if (!items) {                                    // estado zero: a bíblia inteira
-    g3.mode = "whole"; g3.lab = "";
+
+  if (!items) {                                    // ---- estado zero ----
+    g3.mode = "whole"; g3.lab = ""; g3.conn = null; g3.from = null;
     g3.edges = g3.whole.edges;
     setNodes(g3.whole.nodes.map(n => ({ ...n })));
     return;
   }
-  g3.mode = "ego"; g3.lab = lab; g3.edges = [];
+
+  const fromKey = cur ? `${cur.book}.${cur.ch}` : null;
+  const fromIdx = fromKey != null ? CHIDX[fromKey] : null;
+
+  if (G3STYLE === "sphere") {                      // ---- modo GLOBO ----
+    // cada conexão vai para a posição do SEU capítulo no globo; vários versos
+    // do mesmo capítulo ganham um leve deslocamento determinístico
+    const conn = new Map();
+    for (const it of items) {
+      const ti = CHIDX[`${it.ref[0]}.${it.ref[1]}`];
+      if (ti == null) continue;
+      const p = conn.get(ti);
+      if (p) { if (it.votes > p.votes) conn.set(ti, { ...it, ti, n: p.n + 1 }); else p.n++; }
+      else conn.set(ti, { ...it, ti, n: 1 });
+    }
+    const maxV = Math.max(...[...conn.values()].map(c => c.votes), 1);
+    const nodes = g3.whole.nodes.map((n, i) => {
+      const c = conn.get(i);
+      if (!c) return { ...n };                     // capítulo comum: clicável, discreto
+      const j = hsym(`${lab}|${n.key}|off`) * 5;   // desloca para não colar no capítulo
+      return {
+        ...n, x: n.x + j, y: n.y + j * .6, z: n.z - j,
+        conn: c, w: c.votes / maxV, dir: c.dir, ref: c.ref,
+        size: 3.4 + 3.4 * (c.votes / maxV),
+        lab: `${c.ref[0]} ${c.ref[1]}:${c.ref[2]}`,
+        tip: c.tip,
+      };
+    });
+    if (fromIdx != null && nodes[fromIdx]) {
+      nodes[fromIdx] = { ...nodes[fromIdx], isFrom: true, size: 7,
+        ref: [cur.book, cur.ch, cur.v],
+        lab: `${cur.book} ${cur.ch}:${cur.v}`,
+        tip: () => `<b>${refLabel(cur.book, cur.ch, cur.v)}</b> · o versículo que você está lendo · ${items.length} conexões` };
+    }
+    g3.mode = "globe"; g3.lab = lab; g3.from = fromIdx;
+    g3.conn = [...conn.values()];
+    g3.edges = [];
+    setNodes(nodes);
+    return;
+  }
+
+  // ---- modo CONSTELAÇÃO (✦) ----
+  g3.mode = "ego"; g3.lab = lab; g3.edges = []; g3.conn = null; g3.from = null;
   const seed = cur ? `${cur.book} ${cur.ch}:${cur.v}` : lab;
-  const spawn = n => {                             // nasce onde o capítulo está na esfera
+  const spawn = n => {
     const w = g3.whole.nodes[CHIDX[n.ref[0] + "." + n.ref[1]]];
     return w ? [w.x, w.y, w.z] : [0, 0, 0];
   };
@@ -1029,11 +1155,11 @@ function draw3d() {
       n.y = n.y0 + (n.y1 - n.y0) * e;
       n.z = n.z0 + (n.z1 - n.z0) * e;
     }
-    const tgt = g3.mode === "ego" && G3STYLE === "clean" ? 0 : 1;
+    const tgt = g3.mode === "whole" ? 1 : 0;
     g3.alphaWhole += (tgt - g3.alphaWhole) * 0.12;
     if (u >= 1) { for (const n of g3.nodes) { n.x = n.x1; n.y = n.y1; n.z = n.z1; } g3.anim = null; }
   } else {
-    const tgt = g3.mode === "ego" ? (G3STYLE === "clean" ? 0 : .55) : 1;
+    const tgt = g3.mode === "whole" ? 1 : 0;
     g3.alphaWhole += (tgt - g3.alphaWhole) * 0.12;
   }
 
@@ -1080,6 +1206,22 @@ function draw3d() {
 
   g3.nodes.forEach((n, i) => { n._p = proj(n); n._i = i; });
 
+  // modo GLOBO: linhas do capítulo do verso atual até cada capítulo conectado,
+  // atravessando a esfera — as estrelas estão onde realmente ficam no globo
+  if (g3.mode === "globe" && g3.from != null && g3.nodes[g3.from]) {
+    const c0 = g3.nodes[g3.from]._p;
+    for (const n of g3.nodes) {
+      if (!n.conn) continue;
+      const p = n._p, hov = g3.hover === n;
+      const gr = g.createLinearGradient(c0[0], c0[1], p[0], p[1]);
+      const col = n.dir === "in" ? "159,178,196" : "201,133,0";
+      gr.addColorStop(0, `rgba(${col},${(hov ? .95 : .22 + .5 * n.w).toFixed(2)})`);
+      gr.addColorStop(1, `rgba(${col},${hov ? .6 : .07})`);
+      g.strokeStyle = gr;
+      g.lineWidth = hov ? 1.4 : .5 + 1.2 * n.w;
+      g.beginPath(); g.moveTo(c0[0], c0[1]); g.lineTo(p[0], p[1]); g.stroke();
+    }
+  }
   // arestas da constelação: gradiente que se dissolve; ouro = saída, prata = entrada
   if (g3.mode === "ego") {
     const c0 = proj({ x: 0, y: 0, z: 0 });
@@ -1097,23 +1239,36 @@ function draw3d() {
 
   // nós — mais fundo primeiro; estrela = núcleo + halo
   const sorted = [...g3.nodes].sort((a, b) => b._p[3] - a._p[3]);
-  const nlab = g3.mode === "ego" ? (w < 260 ? 0 : 4) : 1;
-  const top = new Set([...g3.nodes].sort((a, b) => b.rank - a.rank).slice(0, nlab));
+  const nlab = w < 260 ? 0 : (g3.mode === "whole" ? 1 : 4);
+  const pool = g3.mode === "globe" ? g3.nodes.filter(n => n.conn) : g3.nodes;
+  const top = new Set([...pool].sort((a, b) => (b.w || 0) - (a.w || 0) || b.rank - a.rank).slice(0, nlab));
   g.font = "10px system-ui"; g.textAlign = "left";
   for (const n of sorted) {
     const p = n._p, hov = g3.hover === n;
-    const col = n.center ? "#c98500" : (n.vt ? "#3987e5" : "#d95926");
-    const sz = Math.max(.6, n.size * p[2] * (hov ? 1.7 : 1));
-    if (g3.mode === "ego") {                        // halo
-      g.fillStyle = (n.vt ? "rgba(57,135,229,.13)" : "rgba(217,89,38,.13)");
+    const lit = !!n.conn || n.isFrom;               // no globo: participa da seleção
+    const dim = g3.mode === "globe" && !lit;        // capítulos de fundo
+    const col = (n.center || n.isFrom) ? "#c98500" : (n.vt ? "#3987e5" : "#d95926");
+    const sz = Math.max(.5, n.size * p[2] * (hov ? 1.7 : lit ? 1.15 : 1));
+    if (g3.mode === "ego" || lit) {                 // halo
+      g.fillStyle = n.isFrom ? "rgba(201,133,0,.18)"
+        : (n.vt ? "rgba(57,135,229,.13)" : "rgba(217,89,38,.13)");
       g.beginPath(); g.arc(p[0], p[1], sz * 3, 0, 7); g.fill();
     }
-    if (hov || n.center) { g.shadowColor = n.center ? "rgba(201,133,0,.9)" : "#fff"; g.shadowBlur = n.center ? 14 : 9; }
+    if (hov || n.center || n.isFrom) {
+      g.shadowColor = (n.center || n.isFrom) ? "rgba(201,133,0,.9)" : "#fff";
+      g.shadowBlur = n.center || n.isFrom ? 14 : 9;
+    }
+    g.globalAlpha = dim ? .34 : 1;
     g.fillStyle = col;
     g.beginPath(); g.arc(p[0], p[1], sz, 0, 7); g.fill();
+    g.globalAlpha = 1;
     g.shadowBlur = 0;
-    if (hov || top.has(n)) {
-      g.fillStyle = hov ? "#ffffff" : "#c3c2b7";
+    if (n.isFrom) {                                  // anel branco no verso lido
+      g.strokeStyle = "rgba(255,255,255,.85)"; g.lineWidth = 1.2;
+      g.beginPath(); g.arc(p[0], p[1], sz + 3.5, 0, 7); g.stroke();
+    }
+    if (hov || n.center || n.isFrom || top.has(n)) {
+      g.fillStyle = (hov || n.isFrom) ? "#ffffff" : "#c3c2b7";
       g.fillText(n.lab, p[0] + 7, p[1] + 3);
     }
   }
@@ -1139,7 +1294,7 @@ function loop3d() {
     g3.raf = setTimeout(() => { g3.raf = requestAnimationFrame(loop3d); }, 250);
     return;
   }
-  if (!g3.drag) g3.rotY += g3.mode === "ego" ? .0022 : .0035;
+  if (!g3.drag) g3.rotY += g3.mode === "whole" ? .0035 : .0022;
   draw3d();
   g3.raf = requestAnimationFrame(loop3d);
 }
@@ -1173,7 +1328,7 @@ $("g3d").addEventListener("pointermove", e => {
   }
   if (e.pointerType !== "mouse") return;
   const best = nodeAt(e.clientX - r.left, e.clientY - r.top);
-  if (best !== g3.hover) { g3.hover = best; draw(); }
+  if (best !== g3.hover) { g3.hover = best; store.set({ hover: best ? best.ref : null }); }
   $("g3d").style.cursor = best ? "pointer" : "grab";
   if (best) showTip(best.tip(), e); else hideTip();
 });
@@ -1241,7 +1396,7 @@ function setG3Style(s) {
   G3STYLE = s;
   [...$("g3style").children].forEach(b => b.classList.toggle("on", b.dataset.s === s));
   try { localStorage.setItem("mob_g3style", s); } catch {}
-  draw3d();
+  rebuild3d(); draw3d(); start3d();
 }
 for (const btn of $("g3style").children)
   btn.onclick = () => setG3Style(btn.dataset.s);
@@ -1345,7 +1500,8 @@ function focusVerse() {
     r.style.filter = j === i ? "none" : `blur(${Math.min(d * 0.16, 0.8)}px)`;
     r.style.transform = j === i ? "none" : `rotateX(${j < i ? 9 : -9}deg) scale(${Math.max(0.86, 1 - d * 0.018)})`;
   });
-  const y = rows[i].offsetTop + rows[i].offsetHeight / 2 - $("crawl").clientHeight / 2;
+  const anchor = isMobile() ? 0.30 : 0.5;
+  const y = rows[i].offsetTop + rows[i].offsetHeight / 2 - $("crawl").clientHeight * anchor;
   box.style.transform = `translateY(${-y}px)`;
 }
 
@@ -1367,7 +1523,7 @@ async function loadVerse() {
   $("ncon").textContent = verseData.links.length ? `· ${verseData.links.length}` : "";
   $("ncon").title = "conexões deste versículo (o capítulo inteiro soma bem mais)";
   $("links").innerHTML = verseData.links.length ? verseData.links.map((l, i) =>
-    `<div class="link" data-i="${i}">
+    `<div class="link" data-i="${i}" data-ref="${l.b}.${l.c}.${l.v}">
        <span class="dir ${l.dir}">${l.dir === "out" ? "→" : "←"}</span>
        <span class="lref">${l.name} ${l.c}:${l.v}${l.ve ? "-" + l.ve : ""}</span>
        <span class="lsn">${esc(l.snippet)}</span>
@@ -1597,6 +1753,7 @@ $("next").onclick = () => trailGo(pos + 1);
 /* ================= estado zero ================= */
 function zeroState() {
   trail = []; pos = -1; cur = null; verseData = null; chapterData = null;
+  store.set({ ref: null, hover: null, mode: "zero" });
   queryCtx = null;
   $("crawl").classList.remove("list");
   $("verses").classList.remove("list");
@@ -1632,6 +1789,7 @@ async function queryMode(q, fromTrail = false) {
   const data = await api(`/api/query_center?q=${encodeURIComponent(q)}`);
   queryCtx = data;
   cur = null; verseData = null; chapterData = null;
+  store.set({ ref: null, hover: null, mode: "query" });
   chapterNotes = [];
   if (!fromTrail) {
     trail = trail.slice(0, pos + 1);
@@ -1691,6 +1849,7 @@ async function go(ref, { fromTrail = false } = {}) {
   document.body.classList.add("hasverse");
   const sameCh = chapterData && cur && cur.book === ref.book && cur.ch === ref.ch;
   cur = { ...ref };
+  store.set({ ref: [cur.book, cur.ch, cur.v], mode: "verse" });
   location.hash = `${cur.book}/${cur.ch}/${cur.v}`;
   if (!sameCh) await loadChapter(cur.book, cur.ch);
   focusVerse();

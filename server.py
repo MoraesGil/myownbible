@@ -140,9 +140,19 @@ def meta():
         " SELECT src_book book, src_ch ch, src_v v FROM crossrefs"
         " UNION ALL SELECT dst_book, dst_ch, dst_v FROM crossrefs)"
         " GROUP BY book, ch, v ORDER BY n DESC LIMIT 1").fetchone()
+    # dentro do capítulo mais conectado, qual verso lidera (o centro precisa ser
+    # um ponto REAL e navegável, não um capítulo abstrato)
+    ccv = con.execute(
+        "SELECT v, count(*) n FROM ("
+        " SELECT src_v v FROM crossrefs WHERE src_book=? AND src_ch=?"
+        " UNION ALL SELECT dst_v FROM crossrefs WHERE dst_book=? AND dst_ch=?)"
+        " GROUP BY v ORDER BY n DESC LIMIT 1",
+        (cch["book"], cch["ch"], cch["book"], cch["ch"])).fetchone()
     con.close()
     return {"books": books, "bg_edges": edges,
             "center": {"chapter": [cch["book"], cch["ch"]], "n": cch["n"],
+                       "chapter_verse": [cch["book"], cch["ch"], ccv["v"]],
+                       "chapter_verse_n": ccv["n"],
                        "verse": [cv["book"], cv["ch"], cv["v"]], "verse_n": cv["n"]},
             "totals": {"verses": total, "crossrefs": xr, "translations": 18}}
 
