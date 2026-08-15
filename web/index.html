@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>myownbible</title>
 <style>
   :root {
@@ -21,11 +21,28 @@
   }
   * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; }
+  /* layout ÚNICO em L: arco no topo, 3D à esquerda, leitor no meio, HUD à direita.
+     main{display:contents} deixa os filhos virarem itens do grid do body. */
   body {
     background: var(--page); color: var(--ink-2);
     font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
-    display: flex; flex-direction: column; overflow: hidden;
+    overflow: hidden; overscroll-behavior: none;
+    display: grid;
+    grid-template-columns: minmax(240px, .85fr) minmax(0, 2.1fr) minmax(340px, 1.35fr);
+    grid-template-rows: auto var(--arch, 36vh) 7px minmax(0, 1fr);
+    grid-template-areas:
+      "head head head"
+      "arc  arc  arc"
+      "spl  spl  spl"
+      "g3d  read hud";
   }
+  main { display: contents; }
+  header  { grid-area: head; }
+  #arcbox { grid-area: arc; }
+  #vsplitter { grid-area: spl; }
+  #pane3d { grid-area: g3d; }
+  #reader { grid-area: read; }
+  #hud    { grid-area: hud; }
   b { color: var(--ink); }
   button { font: inherit; }
 
@@ -55,43 +72,35 @@
   .sg .ref { color: var(--ink); font-weight: 600; white-space: nowrap; }
   .sg .sn { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   .sg .kind { font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-radius: 99px; padding: 0 8px; }
-  #laytabs { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex: none; }
-  #laytabs button {
-    background: var(--surface); color: var(--muted); border: 0; padding: 4px 10px;
-    cursor: pointer; font-size: 12px;
-  }
-  #laytabs button + button { border-left: 1px solid var(--border); }
-  #laytabs button.on { background: var(--surface-2); color: var(--hl); font-weight: 600; }
-  /* layouts */
-  body.layout-leitura #arcbox { height: 18vh; min-height: 130px; }
-  body.layout-nografo #arcbox { display: none; }
-  body.layout-grafo #arcbox { height: 42vh; }
-  body.layout-grafo #pane3d {
-    flex: 0 0 32%; min-width: 280px; border-right: 1px solid var(--border);
-    border-left: none; position: relative;
-  }
   .stats { margin-left: auto; display: flex; gap: 14px; font-size: 12px; color: var(--muted); white-space: nowrap; }
   .stats b { font-variant-numeric: tabular-nums; }
 
-  /* ---------- grafo (2d / 3d / split) ---------- */
-  #arcbox { position: relative; height: 36vh; min-height: 230px; background: var(--page); display: flex; }
-  .pane { position: relative; flex: 1; min-width: 0; }
-  .pane canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  /* ---------- grafo ---------- */
+  #arcbox { position: relative; background: var(--page); min-height: 0; }
+  .pane { position: relative; min-width: 0; min-height: 0; }
+  .pane canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+    touch-action: none;
+  }
   #arc { cursor: crosshair; }
   #g3d { cursor: grab; }
-  #pane3d { border-left: 1px solid var(--border); }
-  #arcbox.v2d #pane3d { display: none; }
-  #arcbox.v3d #pane2d { display: none; }
-  /* modo 2D+3D: o 3D flutua DENTRO da seção do grafo, invisível —
-     sem fundo, sem sombra; arraste-o pegando nele direto */
-  #arcbox.vsplit #pane3d {
-    position: absolute; width: var(--flyd, 300px); height: var(--flyd, 300px);
-    border: none; background: transparent;
-    z-index: 40; overflow: hidden;
+  #pane2d { position: absolute; inset: 0; }
+  #pane3d { border-right: 1px solid var(--border); }
+  /* toggle de estilo do 3D: ✦ constelação limpa · ◍ sobre a esfera */
+  #g3style {
+    position: absolute; top: 6px; right: 6px; z-index: 12; display: flex;
+    border: 1px solid var(--border); border-radius: 7px; overflow: hidden;
+    background: rgba(26,26,25,.7);
   }
+  #g3style button {
+    background: none; border: 0; color: var(--muted); cursor: pointer;
+    font-size: 12px; line-height: 1; padding: 3px 7px;
+  }
+  #g3style button + button { border-left: 1px solid var(--border); }
+  #g3style button.on { color: var(--hl); background: var(--surface-2); }
   /* divisor redimensionável entre o grafo e o resto */
   #vsplitter {
-    height: 7px; cursor: row-resize; flex: none;
+    cursor: row-resize; touch-action: none;
     background: var(--surface); border-top: 1px solid var(--border);
     border-bottom: 1px solid var(--border);
   }
@@ -116,21 +125,16 @@
     font-size: 11px; color: var(--muted); z-index: 10; pointer-events: none;
   }
   .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
-  #viewtabs {
-    position: absolute; top: 8px; right: 12px; z-index: 10;
-    display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
-  }
-  #viewtabs button, #ordertabs button {
+  #ordertabs button {
     background: var(--surface); color: var(--muted); border: 0; padding: 4px 12px;
     cursor: pointer; font-size: 12px;
   }
-  #viewtabs button + button, #ordertabs button + button { border-left: 1px solid var(--border); }
-  #viewtabs button.on, #ordertabs button.on { background: var(--surface-2); color: var(--hl); font-weight: 600; }
+  #ordertabs button + button { border-left: 1px solid var(--border); }
+  #ordertabs button.on { background: var(--surface-2); color: var(--hl); font-weight: 600; }
 
   /* ---------- corpo ---------- */
-  main { flex: 1; display: flex; min-height: 0; border-top: 1px solid var(--border); }
   #reader {
-    flex: 1.25; min-width: 0; display: flex; flex-direction: column;
+    min-width: 0; min-height: 0; display: flex; flex-direction: column;
     background: var(--surface); border-right: 1px solid var(--border);
   }
   #crawlhead {
@@ -182,7 +186,7 @@
   #fadeBot { bottom: 0; background: linear-gradient(transparent, var(--surface)); }
 
   /* HUD */
-  #hud { flex: 1; min-width: 340px; max-width: 480px; overflow-y: auto; background: var(--page); padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+  #hud { min-width: 0; overflow-y: auto; background: var(--page); padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
   .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
   #bigref { font-size: 19px; font-weight: 700; color: var(--ink); letter-spacing: .02em; }
   .meterrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; font-size: 12px; }
@@ -239,6 +243,74 @@
   .cta2:hover { border-color: var(--hl); color: var(--ink); }
   ::-webkit-scrollbar { width: 9px; }
   ::-webkit-scrollbar-thumb { background: var(--grid); border-radius: 99px; }
+
+  /* ================= responsivo ================= */
+  #tabbar { grid-area: tabs; display: none; background: var(--surface);
+    border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); z-index: 50; }
+  #tabbar button {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: none; border: 0; color: var(--muted); font-size: 10px;
+    padding: 7px 0 5px; cursor: pointer; position: relative;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #tabbar button span { font-size: 19px; line-height: 1; }
+  #tabbar button.on { color: var(--hl); }
+  #tabbar .tdot { display: none; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--hl); position: absolute; top: 4px; right: 50%; margin-right: -16px; }
+  body.hasnote #tabbar button[data-tab="notas"] .tdot { display: block; }
+
+  /* tablet: mesma topologia, mais apertada */
+  @media (max-width: 1023px) {
+    body {
+      grid-template-columns: minmax(150px,.6fr) minmax(0,2fr) minmax(240px,1fr);
+      grid-template-rows: auto var(--arch, 26vh) 7px minmax(0,1fr);
+    }
+    #hud { padding: 10px 12px; }
+    #hint, .stats { display: none; }
+    header { gap: 10px; padding: 8px 12px; }
+  }
+
+  /* mobile: tab bar + views comutadas por body[data-tab] */
+  @media (max-width: 767px) {
+    #tabbar { display: flex; }
+    #vsplitter, .legend, #ordertabs, #hint, .stats { display: none; }
+    #q { font-size: 16px; }                     /* evita o zoom automático do Safari */
+    .tld i { width: 13px; height: 13px; }
+    #tip { left: 8px !important; right: 8px !important; top: auto !important;
+      bottom: calc(64px + env(safe-area-inset-bottom)) !important;
+      white-space: normal; text-align: center; }
+    #pane3d, #hud, #reader { display: none; }
+    #pane3d { border: 0; }
+    body[data-tab="ler"] #reader { display: flex; }
+    body[data-tab="grafo"] #pane3d { display: block; }
+    body[data-tab="notas"] #hud { display: flex; }
+    body[data-tab="notas"] #hud > .panel:not(#notesPanel) { display: none; }
+    /* conexões vivem dentro da aba Ler, sob o texto */
+    body[data-tab="ler"] #hud { display: flex; grid-area: read; overflow: visible;
+      max-height: 34vh; border-top: 1px solid var(--border); }
+    body[data-tab="ler"] #hud > .panel:not(#linksPanel) { display: none; }
+  }
+  @media (max-width: 767px) and (orientation: landscape) {
+    body {
+      grid-template-columns: 1fr;
+      grid-template-rows: auto var(--arch, 30vh) minmax(0,1fr) calc(52px + env(safe-area-inset-bottom));
+      grid-template-areas: "head" "arc" "read" "tabs";
+    }
+    #pane3d, #reader, #hud { grid-area: read; }
+    body[data-tab="ler"] #reader { display: flex; }
+  }
+  @media (max-width: 767px) and (orientation: portrait) {
+    body {
+      grid-template-columns: 58px minmax(0,1fr);
+      grid-template-rows: auto minmax(0,1fr) calc(52px + env(safe-area-inset-bottom));
+      grid-template-areas: "head head" "arc read" "tabs tabs";
+    }
+    #arcbox { border-right: 1px solid var(--border); }
+    #pane3d, #reader, #hud { grid-area: read; }
+    body[data-tab="ler"] #hud { position: fixed; left: 58px; right: 0;
+      bottom: calc(52px + env(safe-area-inset-bottom)); max-height: 30vh;
+      background: var(--page); z-index: 20; }
+  }
 </style>
 </head>
 <body data-palette="#3987e5,#d95926,#c98500">
@@ -252,37 +324,32 @@
     <input id="q" placeholder="busque um trecho ou passagem — ex.: jo 3:16, 'no princípio', fé…" autocomplete="off">
     <div id="sugg"></div>
   </div>
-  <div id="laytabs">
-    <button data-l="leitura" title="destaque na leitura — grafo compacto">leitura</button>
-    <button data-l="padrao" class="on" title="layout atual">padrão</button>
-    <button data-l="grafo" title="destaque no grafo — 2D no topo + 3D na lateral, em L">grafo L</button>
-    <button data-l="nografo" title="só o texto, sem grafo">s/ grafo</button>
-  </div>
   <div class="stats" id="stats"></div>
 </header>
 
-<div id="arcbox" class="v2d">
+<div id="arcbox">
   <div class="legend">
     <span><i style="background:var(--vt)"></i>Velho Testamento</span>
     <span><i style="background:var(--nt)"></i>Novo Testamento</span>
     <span><i style="background:var(--hl)"></i>conexões do verso atual</span>
   </div>
-  <div id="viewtabs">
-    <button data-v="v2d" class="on">2D</button>
-    <button data-v="v3d">3D</button>
-    <button data-v="vsplit">2D + 3D</button>
-  </div>
-  <div id="ordertabs" style="position:absolute; top:8px; right:196px; z-index:10; display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden">
+  <div id="ordertabs" style="position:absolute; top:8px; right:12px; z-index:10; display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden">
     <button data-o="canon" class="on" title="ordem dos livros como no cânon (por gênero literário)">canônica</button>
     <button data-o="chrono" title="ordem aproximada dos eventos/escrita — datações são debatidas">cronológica≈</button>
   </div>
   <div class="pane" id="pane2d"><canvas id="arc"></canvas></div>
-  <div class="pane" id="pane3d"><canvas id="g3d"></canvas></div>
 </div>
 <div id="vsplitter" title="arraste para redimensionar o grafo"></div>
 <div id="tip"></div>
 
 <main>
+  <div class="pane" id="pane3d">
+    <canvas id="g3d"></canvas>
+    <div id="g3style">
+      <button data-s="clean" class="on" title="constelação limpa">✦</button>
+      <button data-s="sphere" title="constelação sobre a esfera da Bíblia">◍</button>
+    </div>
+  </div>
   <section id="reader">
     <div id="crawlhead">
       <button class="navbtn" id="home2" title="1º clique: ponto 0 da trilha · 2º clique: limpa tudo">⌂</button>
@@ -323,7 +390,7 @@
       </div>
       <div class="chips" id="presence"></div>
     </div>
-    <div class="panel">
+    <div class="panel" id="linksPanel">
       <h3>Conexões <span id="ncon" style="color:var(--hl)"></span></h3>
       <div id="links"><div class="empty">selecione um verso</div></div>
     </div>
@@ -345,6 +412,12 @@
     </div>
   </aside>
 </main>
+
+<nav id="tabbar">
+  <button data-tab="ler"><span>📖</span>Ler</button>
+  <button data-tab="grafo"><span>✦</span>Grafo</button>
+  <button data-tab="notas"><span>📝</span>Notas<i class="tdot"></i></button>
+</nav>
 
 <script>
 "use strict";
@@ -466,24 +539,33 @@ function drawBg(w, h, dpr) {
   }
   drawAxisBase(g, h);
 }
-/* zoom in/out da timeline (roda do mouse; deltaX faz pan) */
-function tlWheel(e, r) {
-  const mx = e.clientX - r.left;
-  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
-    ZOOM.x0 += e.deltaX;
-  } else {
-    const k = e.deltaY < 0 ? 1.13 : 1 / 1.13;
-    const s2 = Math.max(1, Math.min(40, ZOOM.s * k));
-    ZOOM.x0 = (mx + ZOOM.x0 - 14) * (s2 / ZOOM.s) - mx + 14;
-    ZOOM.s = s2;
-  }
-  const maxX0 = (r.width - 28) * (ZOOM.s - 1);
-  ZOOM.x0 = Math.max(0, Math.min(maxX0, ZOOM.x0));
-  bgCanvas = null; g3.axisKey = null; draw();
+/* ---- orientação: no portrait mobile a MESMA timeline é desenhada na vertical
+   via transform do canvas; as funções de desenho não mudam, só as coordenadas ---- */
+const mqPortrait = matchMedia("(max-width: 767px) and (orientation: portrait)");
+const isVert = () => mqPortrait.matches;
+const axisLen = r => isVert() ? r.height : r.width;   // comprimento do eixo
+const axisThk = r => isVert() ? r.width : r.height;   // espessura da faixa
+// tela → espaço lógico (o inverso de translate(cw,0)+rotate(90°))
+const toLogical = (px, py, r) => isVert() ? [py, r.width - px] : [px, py];
+
+/* zoom/pan da timeline — primitivas compartilhadas por roda, pinça e teclado */
+function tlClamp(len) {
+  ZOOM.x0 = Math.max(0, Math.min((len - 28) * (ZOOM.s - 1), ZOOM.x0));
+  bgCanvas = null; draw();
 }
+function tlZoom(mx, k, len) {
+  const s2 = Math.max(1, Math.min(40, ZOOM.s * k));
+  ZOOM.x0 = (mx + ZOOM.x0 - 14) * (s2 / ZOOM.s) - mx + 14;
+  ZOOM.s = s2;
+  tlClamp(len);
+}
+function tlPan(d, len) { ZOOM.x0 += d; tlClamp(len); }
 $("arc").addEventListener("wheel", e => {
   e.preventDefault();
-  tlWheel(e, $("arc").getBoundingClientRect());
+  const r = $("arc").getBoundingClientRect();
+  const [mx] = toLogical(e.clientX - r.left, e.clientY - r.top, r);
+  if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) tlPan(e.deltaX, axisLen(r));
+  else tlZoom(mx, e.deltaY < 0 ? 1.13 : 1 / 1.13, axisLen(r));
 }, { passive: false });
 function qpoint(x1, x2, base, hgt, t) {           // ponto na quadrática
   const cx = (x1 + x2) / 2, cy = base - hgt;
@@ -494,10 +576,21 @@ function draw() {
   const cv = $("arc"), pane = $("pane2d");
   if (!META || !pane.clientWidth) return;
   const dpr = window.devicePixelRatio || 1;
-  const w = pane.clientWidth, h = pane.clientHeight;
-  cv.width = w * dpr; cv.height = h * dpr;
+  const cw = pane.clientWidth, chh = pane.clientHeight;
+  cv.width = cw * dpr; cv.height = chh * dpr;
   const g = cv.getContext("2d");
-  g.scale(dpr, dpr);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // espaço lógico: w = comprimento do eixo, h = espessura da faixa
+  const VERT = isVert();
+  const w = VERT ? chh : cw, h = VERT ? cw : chh;
+  if (VERT) { g.translate(cw, 0); g.rotate(Math.PI / 2); }
+  if (VERT) {                    // portrait: só as barras e marcadores, sem arcos
+    layout(w);
+    drawAxisBase(g, h);
+    drawAxisMarks(g, w, h);
+    goldArcs = [];
+    return;
+  }
   if (!bgCanvas || bgCanvas.width !== w * dpr) { layout(w); drawBg(w, h, dpr); }
   g.drawImage(bgCanvas, 0, 0, w, h);
   const base = h - 34;
@@ -589,340 +682,533 @@ function arcHitTest(mx, my, h) {
   return null;
 }
 
+/* ---- tooltip compartilhado (no toque, ancorado acima da tab bar) ---- */
+function showTip(html, ev) {
+  const tip = $("tip");
+  tip.innerHTML = html;
+  tip.style.display = "block";
+  if (ev && ev.pointerType !== "touch" && !isMobile()) {
+    tip.style.left = Math.min(ev.clientX + 14, innerWidth - 320) + "px";
+    tip.style.top = (ev.clientY - 34) + "px";
+  }
+}
+function hideTip() { $("tip").style.display = "none"; }
+const isMobile = () => matchMedia("(max-width: 767px)").matches;
+
+/* ---- pinça: helper compartilhado pelos dois canvas ---- */
+let pinch = null;
+const pdist = t => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+function attachPinch(el, onScale) {
+  el.addEventListener("touchstart", e => {
+    if (e.touches.length === 2) { pinch = { d: pdist(e.touches) }; g3.drag = null; }
+  }, { passive: false });
+  el.addEventListener("touchmove", e => {
+    if (e.touches.length !== 2 || !pinch) return;
+    e.preventDefault();
+    const d = pdist(e.touches);
+    onScale(d / pinch.d,
+      (e.touches[0].clientX + e.touches[1].clientX) / 2,
+      (e.touches[0].clientY + e.touches[1].clientY) / 2);
+    pinch.d = d;
+  }, { passive: false });
+  el.addEventListener("touchend", e => { if (e.touches.length < 2) pinch = null; });
+}
+attachPinch($("g3d"), k => { g3.zoom = Math.max(.4, Math.min(3, g3.zoom * k)); });
+attachPinch($("arc"), (k, cx, cy) => {
+  const r = $("arc").getBoundingClientRect();
+  tlZoom(toLogical(cx - r.left, cy - r.top, r)[0], k, axisLen(r));
+});
+
+/* ---- interação da timeline 2D ---- */
+function tipFor(hit, c) {
+  if (hit && hit.kind === "gold") return hit.a.tip;
+  if (hit && hit.kind === "bg") {
+    const e = hit.e;
+    const an = (META.books.find(b => b.code === e[0]) || {}).name || e[0];
+    const bn = (META.books.find(b => b.code === e[2]) || {}).name || e[2];
+    return `<b>${an} ${e[1]}</b> ⇄ <b>${bn} ${e[3]}</b> · ${e[4]} conexões`;
+  }
+  if (c) return `<b>${c.name} ${c.ch}</b> · ${c.n} vv` +
+    (noteMap.has(c.book + "." + c.ch) ? ' · <span style="color:var(--hl)">●</span> tem nota' : "");
+  return null;
+}
 let hoverRAF = null;
-$("arc").addEventListener("mousemove", ev => {
-  if (hoverRAF) return;
+$("arc").addEventListener("pointermove", ev => {
+  if (ev.pointerType !== "mouse" || hoverRAF) return;
   hoverRAF = requestAnimationFrame(() => {
     hoverRAF = null;
     const r = $("arc").getBoundingClientRect();
-    const mx = ev.clientX - r.left, my = ev.clientY - r.top;
-    const tip = $("tip");
-    const hit = arcHitTest(mx, my, r.height);
+    const [mx, my] = toLogical(ev.clientX - r.left, ev.clientY - r.top, r);
+    const hit = arcHitTest(mx, my, axisThk(r));
     if ((hit && hit.a) !== (hoverArc && hoverArc.a) || (hit && hit.e) !== (hoverArc && hoverArc.e)) {
       hoverArc = hit; draw();
     }
     $("arc").style.cursor = hit ? "pointer" : "crosshair";
-    if (hit && hit.kind === "gold") {
-      tip.innerHTML = hit.a.tip;
-    } else if (hit && hit.kind === "bg") {
-      const e = hit.e;
-      const an = META.books.find(b => b.code === e[0]).name;
-      const bn = META.books.find(b => b.code === e[2]).name;
-      tip.innerHTML = `<b>${an} ${e[1]}</b> ⇄ <b>${bn} ${e[3]}</b> · ${e[4]} conexões`;
-    } else {
-      const c = chapterAt(mx);
-      if (c && my > r.height - 34) {
-        tip.innerHTML = `<b>${c.name} ${c.ch}</b> · ${c.n} vv` +
-          (noteMap.has(c.book + "." + c.ch) ? ' · <span style="color:var(--hl)">●</span> tem nota' : "");
-      } else { tip.style.display = "none"; return; }
-    }
-    tip.style.display = "block";
-    tip.style.left = Math.min(ev.clientX + 14, innerWidth - 260) + "px";
-    tip.style.top = (ev.clientY - 34) + "px";
+    const c = hit ? null : (my > axisThk(r) - 34 ? chapterAt(mx) : null);
+    const html = tipFor(hit, c);
+    if (html) showTip(html, ev); else hideTip();
   });
 });
-$("arc").addEventListener("mouseleave", () => { $("tip").style.display = "none"; if (hoverArc) { hoverArc = null; draw(); } });
-$("arc").addEventListener("click", ev => {
+$("arc").addEventListener("mouseleave", () => { hideTip(); if (hoverArc) { hoverArc = null; draw(); } });
+/* pan de 1 dedo quando há zoom; tap navega (no toque, 1º revela / 2º navega) */
+let arcDrag = null, arcArmed = null;
+$("arc").addEventListener("pointerdown", ev => {
+  arcDrag = { x: ev.clientX, y: ev.clientY, moved: 0 };
+  $("arc").setPointerCapture(ev.pointerId);
+});
+$("arc").addEventListener("pointermove", ev => {
+  if (!arcDrag || pinch) return;
   const r = $("arc").getBoundingClientRect();
-  const hit = arcHitTest(ev.clientX - r.left, ev.clientY - r.top, r.height);
+  const d = isVert() ? ev.clientY - arcDrag.y : ev.clientX - arcDrag.x;
+  arcDrag.moved += Math.abs(ev.clientX - arcDrag.x) + Math.abs(ev.clientY - arcDrag.y);
+  if (ZOOM.s > 1) tlPan(-d, axisLen(r));
+  arcDrag.x = ev.clientX; arcDrag.y = ev.clientY;
+});
+$("arc").addEventListener("pointerup", ev => {
+  const moved = arcDrag ? arcDrag.moved : 0;
+  arcDrag = null;
+  if (moved > 8) return;
+  const r = $("arc").getBoundingClientRect();
+  const [mx, my] = toLogical(ev.clientX - r.left, ev.clientY - r.top, r);
+  const hit = arcHitTest(mx, my, axisThk(r));
+  const c = hit ? null : chapterAt(mx);
+  const key = hit ? (hit.kind + JSON.stringify(hit.a ? hit.a.ref : hit.e))
+                  : (c ? c.book + "." + c.ch : null);
+  if (!key) { arcArmed = null; hideTip(); return; }
+  if (ev.pointerType !== "mouse" && arcArmed !== key) {   // toque: 1º revela
+    arcArmed = key; hoverArc = hit; draw();
+    showTip(tipFor(hit, c), ev);
+    return;
+  }
+  arcArmed = null; hideTip();
   if (hit && hit.kind === "gold") return jump(hit.a.ref[0], hit.a.ref[1], hit.a.ref[2]);
   if (hit && hit.kind === "bg") return jump(hit.e[2], hit.e[3], 1);
-  const c = chapterAt(ev.clientX - r.left);
   if (c) jump(c.book, c.ch, 1);
 });
+$("arc").addEventListener("pointercancel", () => { arcDrag = null; });
 
-/* ================= 3D (ego-rede estilo graphify) ================= */
-const g3 = { nodes: [], edges: [], sel: null, rotY: 0, rotX: -0.25, zoom: 1,
-             drag: null, hover: null, raf: null };
-function build3dSphere() {    // layout ÚNICO do 3D: a esfera da bíblia inteira
-  g3.nodes = []; g3.edges = [];
+/* ================= 3D — constelação determinística por versículo =========
+   Cada versículo gera SUA figura: raio = força da conexão, latitude = posição
+   no cânon, ângulo = sequência áurea + constantes derivadas do hash da
+   referência (mesma passagem ⇒ mesma figura, sempre). */
+const g3 = {
+  nodes: [], edges: [], mode: "whole", whole: null, dust: null, lab: "",
+  rotY: 0, rotX: -0.25, zoom: 1, fit: 1, drag: null, hover: null, raf: null,
+  anim: null, alphaWhole: 1,
+};
+/* FNV-1a: determinismo sem Math.random */
+function h32(s) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
+}
+const hs = s => h32(s) / 4294967296;          // 0..1
+const hsym = s => hs(s) * 2 - 1;              // -1..1
+const ease = u => u < .5 ? 4*u*u*u : 1 - Math.pow(-2*u + 2, 3) / 2;
+const EGO = { r0: 38, r1: 168, k: 0.7 };
+const GOLDEN = 0.6180339887498949;
+
+/* a esfera da bíblia inteira + a poeira estelar — cache (boot e troca de ordem) */
+function build3dSphere() {
   const N = CHAPTERS.length;
   const [cb, cc] = META.center.chapter;
-  const [vb, vc, vv] = META.center.verse;
   const maxN = Math.max(...CHAPTERS.map(c => c.n));
-  CHAPTERS.forEach((c, i) => {
-    const isCenter = c.book === cb && c.ch === cc;
+  const nodes = CHAPTERS.map((c, i) => {
     const t = i / (N - 1);
     const y = (1 - 2 * t) * 105;                     // VT no norte → NT no sul
     const rr = Math.sqrt(Math.max(0, 1 - (y / 105) ** 2)) * 150;
-    const theta = i * 0.19;                          // espiral
-    g3.nodes.push(isCenter
-      ? { x: 0, y: 0, z: 0, vt: c.t === "VT", size: 8, center: true, rank: 1e9,
-          lab: `☉ ${c.book} ${c.ch}`, ref: [c.book, c.ch, 1],
-          tip: () => `<b>${c.name} ${c.ch}</b> · ponto central da bíblia — ${META.center.n.toLocaleString("pt-BR")} conexões (verso mais conectado: ${refLabel(vb, vc, vv)})` }
-      : { x: rr * Math.cos(theta), y, z: rr * Math.sin(theta), vt: c.t === "VT",
-          size: 1.1 + 2.6 * (c.n / maxN), rank: c.n,
-          lab: `${c.book} ${c.ch}`, ref: [c.book, c.ch, 1],
-          tip: () => `<b>${c.name} ${c.ch}</b> · ${c.n} vv` +
-            (noteMap.has(c.book + "." + c.ch) ? ' · <span style="color:var(--hl)">●</span> nota' : "") });
+    const th = i * 0.19;
+    const base = {
+      key: `${c.book}.${c.ch}`, ref: [c.book, c.ch, 1], vt: c.t === "VT",
+      lab: `${c.book} ${c.ch}`, rank: c.n,
+      tip: () => `<b>${c.name} ${c.ch}</b> · ${c.n} vv` +
+        (noteMap.has(c.book + "." + c.ch) ? ' · <span style="color:var(--hl)">●</span> nota' : ""),
+    };
+    return (c.book === cb && c.ch === cc)
+      ? { ...base, x: 0, y: 0, z: 0, size: 8, center: true, rank: 1e9,
+          lab: `☉ ${c.book} ${c.ch}`,
+          tip: () => `<b>${c.name} ${c.ch}</b> · capítulo mais conectado da bíblia (${META.center.n.toLocaleString("pt-BR")} conexões)` }
+      : { ...base, x: rr * Math.cos(th), y, z: rr * Math.sin(th),
+          size: 1.1 + 2.6 * (c.n / maxN) };
   });
+  const edges = [];
   for (const e of META.bg_edges.slice(0, 500)) {
     const a = CHIDX[e[0] + "." + e[1]], b = CHIDX[e[2] + "." + e[3]];
-    if (a != null && b != null) g3.edges.push([a, b, e[4]]);
+    if (a != null && b != null) edges.push([a, b, e[4]]);
   }
+  g3.whole = { nodes, edges };
+  g3.dust = Array.from({ length: 280 }, (_, i) => {
+    const u = hsym("dust" + i), th = hs("dustT" + i) * Math.PI * 2;
+    const r = 300 + hs("dustR" + i) * 140, sp = Math.sqrt(Math.max(0, 1 - u * u));
+    return { x: r*sp*Math.cos(th), y: r*u, z: r*sp*Math.sin(th),
+             a: .05 + hs("dustA" + i) * .14, ph: hs("dustP" + i) * 6.28 };
+  });
 }
-function update3dSel() {      // o que muda com a seleção: destaques + linhas
-  g3.sel = null;
+
+/* repulsão SÓ angular: empurra e devolve cada nó ao seu raio, preservando a
+   codificação votos→distância */
+function relax(ns, iters = 3, sep = 26) {
+  for (let it = 0; it < iters; it++)
+    for (let i = 0; i < ns.length; i++) {
+      let dx = 0, dy = 0, dz = 0;
+      for (let j = 0; j < ns.length; j++) {
+        if (i === j) continue;
+        const ax = ns[i].x - ns[j].x, ay = ns[i].y - ns[j].y, az = ns[i].z - ns[j].z;
+        const d2 = ax*ax + ay*ay + az*az;
+        if (d2 >= sep*sep || d2 < 1e-9) continue;
+        const d = Math.sqrt(d2), f = ((sep - d) / d) * .5;
+        dx += ax*f; dy += ay*f; dz += az*f;
+      }
+      if (!dx && !dy && !dz) continue;
+      const x = ns[i].x + dx, y = ns[i].y + dy, z = ns[i].z + dz;
+      const L = Math.hypot(x, y, z) || 1, r = ns[i].r;
+      ns[i].x = x/L*r; ns[i].y = y/L*r; ns[i].z = z/L*r;
+    }
+}
+
+function egoLayout(seedStr, items) {
+  const S = seedStr + "|" + ORDER;                 // a latitude depende da ordem
+  const tilt = hs(S + "#ti") * Math.PI * 2;
+  const twist = hsym(S + "#tw") * 1.1;             // gera as espirais
+  const stretch = 1 + hsym(S + "#st") * .35;
+  const N = CHAPTERS.length;
+  const maxV = Math.max(...items.map(i => i.votes), 1);
+  const byV = [...items].sort((a, b) => b.votes - a.votes);
+  const ns = byV.map((it, j) => {
+    const wLog = Math.log(1 + it.votes) / Math.log(1 + maxV);
+    const wRank = byV.length > 1 ? 1 - j / (byV.length - 1) : 1;
+    const w = .5 * wLog + .5 * wRank;              // 1 = mais forte
+    const key = it.ref.join(".");
+    const sd = S + "|" + key;
+    const r = (EGO.r0 + (EGO.r1 - EGO.r0) * Math.pow(1 - w, EGO.k)) * (1 + hsym(sd + "#r") * .06);
+    const tau = (CHIDX[it.ref[0] + "." + it.ref[1]] ?? 0) / (N - 1);
+    const phi = Math.min(Math.PI, Math.max(0, Math.acos(1 - 2 * tau) + hsym(sd + "#p") * .22));
+    const th = tilt + 2 * Math.PI * ((j * GOLDEN) % 1) + twist * tau + hsym(sd + "#a") * .18;
+    const sp = Math.sin(phi);
+    const bk = META.books.find(b => b.code === it.ref[0]);
+    return {
+      x: r * sp * Math.cos(th), y: r * Math.cos(phi), z: r * sp * Math.sin(th),
+      r, w, key, ref: it.ref, dir: it.dir || "out",
+      vt: bk ? bk.testament === "VT" : true,
+      size: 1.6 + 1.8 * Math.sqrt(w), rank: it.votes,
+      lab: `${it.ref[0]} ${it.ref[1]}:${it.ref[2]}`, tip: it.tip,
+    };
+  });
+  relax(ns);
+  for (const n of ns) n.y *= stretch;              // anisotropia por último
+  return ns;
+}
+
+/* troca os nós com transição; nós que persistem partem de onde estavam */
+function setNodes(nodes, spawn) {
+  const prev = new Map(g3.nodes.map(n => [n.key, n]));
+  for (const n of nodes) {
+    const p = prev.get(n.key);
+    const s = p ? [p.x, p.y, p.z] : (spawn ? spawn(n) : [0, 0, 0]);
+    n.x1 = n.x; n.y1 = n.y; n.z1 = n.z;
+    n.x0 = s[0]; n.y0 = s[1]; n.z0 = s[2];
+    n.x = n.x0; n.y = n.y0; n.z = n.z0;
+  }
+  g3.nodes = nodes;
+  g3.hover = null;
+  g3.anim = { t0: performance.now(), dur: 420 };
+}
+
+/* decide o modo pelo estado e (re)constrói — um ponto de entrada só */
+function rebuild3d() {
+  if (!META || !g3.whole) return;
+  let items = null, lab = "";
   if (cur && verseData && verseData.links && verseData.links.length) {
-    const maxV = Math.max(...verseData.links.map(l => l.votes), 1);
-    const agg = new Map();
+    const seen = new Map();                        // dedupe por verso
     for (const l of verseData.links) {
-      const ti = CHIDX[l.b + "." + l.c];
-      if (ti == null) continue;
-      const a = agg.get(ti) || { ti, n: 0, w: 0, ref: [l.b, l.c, l.v] };
-      a.n++; a.w = Math.max(a.w, l.votes / maxV);
-      agg.set(ti, a);
+      const k = `${l.b}.${l.c}.${l.v}`;
+      const p = seen.get(k);
+      if (p) { p.votes = Math.max(p.votes, l.votes); continue; }
+      seen.set(k, { ref: [l.b, l.c, l.v], votes: l.votes, dir: l.dir,
+        tip: () => `<b>${refLabel(cur.book, cur.ch, cur.v)}</b> ${l.dir === "out" ? "→" : "←"} <b>${l.name} ${l.c}:${l.v}</b> · ${l.votes} votos` });
     }
-    g3.sel = { from: CHIDX[cur.book + "." + cur.ch] ?? null,
-               edges: [...agg.values()], lab: `${cur.book} ${cur.ch}:${cur.v}` };
+    items = [...seen.values()];
+    lab = `${cur.book} ${cur.ch}:${cur.v}`;
   } else if (queryCtx && queryCtx.matches.length) {
-    const agg = new Map();
-    for (const m of queryCtx.matches) {
-      const ti = CHIDX[m.ref[0] + "." + m.ref[1]];
-      if (ti == null) continue;
-      const a = agg.get(ti) || { ti, n: 0, ref: m.ref };
-      a.n++; agg.set(ti, a);
-    }
-    for (const a of agg.values()) a.w = Math.min(1, 0.35 + a.n * 0.2);
-    g3.sel = { from: null, edges: [...agg.values()], lab: `“${queryCtx.q}”` };
+    items = queryCtx.matches.map((m, i) => ({
+      ref: m.ref, votes: m.kind === "texto" ? 100 : 40 - Math.min(35, i),
+      dir: "out",
+      tip: () => `<b>“${queryCtx.q}”</b> → <b>${m.label}</b> · ` +
+        (m.kind === "texto" ? "frase exata" : "sentido próximo"),
+    }));
+    lab = `“${queryCtx.q}”`;
   }
+  if (!items) {                                    // estado zero: a bíblia inteira
+    g3.mode = "whole"; g3.lab = "";
+    g3.edges = g3.whole.edges;
+    setNodes(g3.whole.nodes.map(n => ({ ...n })));
+    return;
+  }
+  g3.mode = "ego"; g3.lab = lab; g3.edges = [];
+  const seed = cur ? `${cur.book} ${cur.ch}:${cur.v}` : lab;
+  const spawn = n => {                             // nasce onde o capítulo está na esfera
+    const w = g3.whole.nodes[CHIDX[n.ref[0] + "." + n.ref[1]]];
+    return w ? [w.x, w.y, w.z] : [0, 0, 0];
+  };
+  setNodes(egoLayout(seed, items), spawn);
 }
-// aliases para os pontos de chamada existentes
-function build3d() { update3dSel(); }
-function build3dQuery() { update3dSel(); }
-function build3dWhole() { g3.sel = null; }
+const build3d = rebuild3d, build3dQuery = rebuild3d,
+      build3dWhole = rebuild3d, update3dSel = rebuild3d;
+
 function draw3d() {
   const cv = $("g3d"), pane = $("pane3d");
-  if (!META || !pane.clientWidth) return;
+  if (!META || !pane.clientWidth || !g3.whole) return;
   const dpr = window.devicePixelRatio || 1;
   const w = pane.clientWidth, h = pane.clientHeight;
   cv.width = w * dpr; cv.height = h * dpr;
   const g = cv.getContext("2d");
   g.scale(dpr, dpr);
-  const cx = w / 2, cy = $("pane2d").clientWidth ? h / 2 : (h - 40) / 2, f = 420;
+  const cx = w / 2, cy = h / 2, f = 420;
+  g3.fit = Math.min(1.35, Math.min(w, h) / (g3.mode === "ego" ? 330 : 420));
+  const now = performance.now();
+
+  if (g3.anim) {                                   // interpolação
+    const u = Math.min(1, (now - g3.anim.t0) / g3.anim.dur), e = ease(u);
+    for (const n of g3.nodes) {
+      n.x = n.x0 + (n.x1 - n.x0) * e;
+      n.y = n.y0 + (n.y1 - n.y0) * e;
+      n.z = n.z0 + (n.z1 - n.z0) * e;
+    }
+    const tgt = g3.mode === "ego" && G3STYLE === "clean" ? 0 : 1;
+    g3.alphaWhole += (tgt - g3.alphaWhole) * 0.12;
+    if (u >= 1) { for (const n of g3.nodes) { n.x = n.x1; n.y = n.y1; n.z = n.z1; } g3.anim = null; }
+  } else {
+    const tgt = g3.mode === "ego" ? (G3STYLE === "clean" ? 0 : .55) : 1;
+    g3.alphaWhole += (tgt - g3.alphaWhole) * 0.12;
+  }
+
   const cosY = Math.cos(g3.rotY), sinY = Math.sin(g3.rotY);
   const cosX = Math.cos(g3.rotX), sinX = Math.sin(g3.rotX);
   const proj = n => {
-    let x = n.x * cosY - n.z * sinY, z = n.x * sinY + n.z * cosY, y = n.y;
-    const y2 = y * cosX - z * sinX, z2 = y * sinX + z * cosX;
-    const s = (f / (f + z2)) * g3.zoom;
+    const x = n.x * cosY - n.z * sinY, z = n.x * sinY + n.z * cosY;
+    const y2 = n.y * cosX - z * sinX, z2 = n.y * sinX + z * cosX;
+    const s = (f / (f + z2)) * g3.zoom * g3.fit;
     return [cx + x * s, cy + y2 * s, s, z2];
   };
-  g3.nodes.forEach((n, i) => { n._p = proj(n); n._i = i; });
-  // arestas de fundo (agregado capítulo-a-capítulo)
-  const maxW = g3.edges.length ? g3.edges[0][2] : 1;
-  for (const [a, b, wgt] of g3.edges) {
-    const pa = g3.nodes[a]._p, pb = g3.nodes[b]._p;
-    const hov = g3.hover === g3.nodes[a] || g3.hover === g3.nodes[b];
-    g.strokeStyle = hov ? "#c98500" : `rgba(137,135,129,${0.06 + 0.18 * (wgt / maxW)})`;
-    g.lineWidth = hov ? 1.1 : 0.4;
-    g.beginPath(); g.moveTo(pa[0], pa[1]); g.lineTo(pb[0], pb[1]); g.stroke();
-  }
-  // as linhas que faltavam: seleção (verso atual ou busca) → capítulos conectados
-  const selSet = new Set();
-  const fromP = g3.sel
-    ? (g3.sel.from != null ? g3.nodes[g3.sel.from]._p : proj({ x: 0, y: 0, z: 0 }))
-    : null;
-  if (g3.sel) {
-    g.shadowColor = "rgba(201,133,0,.8)"; g.shadowBlur = 5;
-    for (const e of g3.sel.edges) {
-      const pb = g3.nodes[e.ti] && g3.nodes[e.ti]._p;
-      if (!pb) continue;
-      selSet.add(e.ti);
-      g.strokeStyle = "#c98500";
-      g.lineWidth = 0.5 + 2 * (e.w || 0.5);
-      g.beginPath(); g.moveTo(fromP[0], fromP[1]); g.lineTo(pb[0], pb[1]); g.stroke();
+
+  // poeira estelar (fundo) — só no modo ego
+  if (g3.mode === "ego") {
+    for (const d of g3.dust) {
+      const p = proj(d);
+      if (p[3] < -400) continue;
+      g.fillStyle = `rgba(200,205,225,${(d.a * (.75 + .25 * Math.sin(now * .002 + d.ph)) * p[2]).toFixed(3)})`;
+      g.beginPath(); g.arc(p[0], p[1], .6 + p[2] * .6, 0, 7); g.fill();
     }
-    g.shadowBlur = 0;
   }
-  // nós — mais fundo primeiro
+
+  // a esfera da bíblia — cheia no estado zero, fantasma no modo ◍
+  if (g3.alphaWhole > .01) {
+    const aw = g3.alphaWhole, isWhole = g3.mode === "whole";
+    if (isWhole) {
+      const maxW = g3.edges.length ? g3.edges[0][2] : 1;
+      for (const [a, b, wgt] of g3.edges) {
+        const pa = g3.nodes[a] && g3.nodes[a]._p, pb = g3.nodes[b] && g3.nodes[b]._p;
+        if (!pa || !pb) continue;
+        const hov = g3.hover === g3.nodes[a] || g3.hover === g3.nodes[b];
+        g.strokeStyle = hov ? "#c98500" : `rgba(137,135,129,${(.06 + .18 * (wgt / maxW)) * aw})`;
+        g.lineWidth = hov ? 1.1 : .4;
+        g.beginPath(); g.moveTo(pa[0], pa[1]); g.lineTo(pb[0], pb[1]); g.stroke();
+      }
+    } else {
+      for (const n of g3.whole.nodes) {              // esfera de contexto (não hit-testável)
+        const p = proj({ x: n.x * 1.5, y: n.y * 1.5, z: n.z * 1.5 });   // envolve a constelação
+        g.fillStyle = (n.vt ? "rgba(57,135,229," : "rgba(217,89,38,") + (aw * .9 * p[2]).toFixed(3) + ")";
+        g.beginPath(); g.arc(p[0], p[1], Math.max(.5, n.size * p[2] * .55), 0, 7); g.fill();
+      }
+    }
+  }
+
+  g3.nodes.forEach((n, i) => { n._p = proj(n); n._i = i; });
+
+  // arestas da constelação: gradiente que se dissolve; ouro = saída, prata = entrada
+  if (g3.mode === "ego") {
+    const c0 = proj({ x: 0, y: 0, z: 0 });
+    for (const n of g3.nodes) {
+      const p = n._p, hov = g3.hover === n;
+      const gr = g.createLinearGradient(c0[0], c0[1], p[0], p[1]);
+      const col = n.dir === "in" ? "159,178,196" : "201,133,0";
+      gr.addColorStop(0, `rgba(${col},${(hov ? .95 : .18 + .45 * n.w).toFixed(2)})`);
+      gr.addColorStop(1, `rgba(${col},${hov ? .5 : .05})`);
+      g.strokeStyle = gr;
+      g.lineWidth = hov ? 1.2 : .4 + 1.2 * n.w;
+      g.beginPath(); g.moveTo(c0[0], c0[1]); g.lineTo(p[0], p[1]); g.stroke();
+    }
+  }
+
+  // nós — mais fundo primeiro; estrela = núcleo + halo
   const sorted = [...g3.nodes].sort((a, b) => b._p[3] - a._p[3]);
-  const top = new Set(g3.sel
-    ? [...g3.sel.edges].sort((a, b) => (b.w || 0) - (a.w || 0)).slice(0, 8)
-        .map(e => g3.nodes[e.ti])
-    : []);
-  const fromIdx = g3.sel && g3.sel.from != null ? g3.sel.from : -1;
+  const nlab = g3.mode === "ego" ? (w < 260 ? 0 : 4) : 1;
+  const top = new Set([...g3.nodes].sort((a, b) => b.rank - a.rank).slice(0, nlab));
   g.font = "10px system-ui"; g.textAlign = "left";
   for (const n of sorted) {
-    const p = n._p;
-    const hov = g3.hover === n, conn = selSet.has(n._i), isFrom = n._i === fromIdx;
-    g.fillStyle = n.center ? "#c98500" : (n.vt ? "#3987e5" : "#d95926");
-    if (hov || n.center || isFrom) {
-      g.shadowColor = (n.center || isFrom) ? "rgba(201,133,0,.9)" : "#fff";
-      g.shadowBlur = n.center ? 14 : 9;
+    const p = n._p, hov = g3.hover === n;
+    const col = n.center ? "#c98500" : (n.vt ? "#3987e5" : "#d95926");
+    const sz = Math.max(.6, n.size * p[2] * (hov ? 1.7 : 1));
+    if (g3.mode === "ego") {                        // halo
+      g.fillStyle = (n.vt ? "rgba(57,135,229,.13)" : "rgba(217,89,38,.13)");
+      g.beginPath(); g.arc(p[0], p[1], sz * 3, 0, 7); g.fill();
     }
-    const sz = n.size * p[2] * (hov ? 1.6 : (conn || isFrom) ? 1.4 : 1);
+    if (hov || n.center) { g.shadowColor = n.center ? "rgba(201,133,0,.9)" : "#fff"; g.shadowBlur = n.center ? 14 : 9; }
+    g.fillStyle = col;
     g.beginPath(); g.arc(p[0], p[1], sz, 0, 7); g.fill();
     g.shadowBlur = 0;
-    if (isFrom) {
-      g.strokeStyle = "#ffffff"; g.lineWidth = 1.2;
-      g.beginPath(); g.arc(p[0], p[1], sz + 2.5, 0, 7); g.stroke();
-    }
-    if (hov || n.center || isFrom || top.has(n)) {
-      g.fillStyle = (hov || isFrom) ? "#ffffff" : "#c3c2b7";
+    if (hov || top.has(n)) {
+      g.fillStyle = hov ? "#ffffff" : "#c3c2b7";
       g.fillText(n.lab, p[0] + 7, p[1] + 3);
     }
   }
-  // rótulo da seleção
-  if (g3.sel && fromP) {
+
+  // núcleo: o versículo (ou a busca) que gera a constelação
+  if (g3.mode === "ego") {
+    const c0 = proj({ x: 0, y: 0, z: 0 });
+    const pulse = 6 + 1.6 * Math.sin(now / 500);
+    g.shadowColor = "rgba(201,133,0,.9)"; g.shadowBlur = 13;
+    g.fillStyle = "#c98500";
+    g.beginPath(); g.arc(c0[0], c0[1], pulse, 0, 7); g.fill();
+    g.shadowBlur = 0;
+    g.strokeStyle = "rgba(255,255,255,.8)"; g.lineWidth = 1;
+    g.beginPath(); g.arc(c0[0], c0[1], pulse + 3.5, 0, 7); g.stroke();
     g.fillStyle = "#ffffff"; g.font = "bold 11px system-ui"; g.textAlign = "center";
-    g.fillText(g3.sel.lab, fromP[0], fromP[1] - 14);
-  }
-  // a MESMA timeline do 2D (sem os arcos) quando o 2D não está visível
-  if (!$("pane2d").clientWidth) {
-    layout(w);
-    drawAxisBase(g, h);
-    drawAxisMarks(g, w, h);
+    g.fillText(g3.lab, c0[0], c0[1] - 16);
   }
 }
 function loop3d() {
-  if (!$("pane3d").clientWidth) { g3.raf = null; return; }
-  if (!g3.drag) g3.rotY += 0.0035;
+  // nunca morre: se o pane está oculto (aba/breakpoint), só espera — voltar a
+  // aparecer não deve exigir que alguém reinicie o loop
+  if (!$("pane3d").clientWidth) {
+    g3.raf = setTimeout(() => { g3.raf = requestAnimationFrame(loop3d); }, 250);
+    return;
+  }
+  if (!g3.drag) g3.rotY += g3.mode === "ego" ? .0022 : .0035;
   draw3d();
   g3.raf = requestAnimationFrame(loop3d);
 }
 function start3d() { if (!g3.raf) g3.raf = requestAnimationFrame(loop3d); }
-$("g3d").addEventListener("mousedown", e => {
-  if ($("arcbox").className === "vsplit") {
-    // no flyout, arrastar o próprio 3D o reposiciona (rotação fica no auto-giro)
-    const rect = $("arcbox").getBoundingClientRect();
-    fly.drag = [e.clientX - rect.left - fly.x, e.clientY - rect.top - fly.y];
-    fly.moved = 0;
-  } else {
-    g3.drag = [e.clientX, e.clientY];
-  }
-  $("g3d").style.cursor = "grabbing";
-  e.preventDefault();
-});
-window.addEventListener("mouseup", () => { g3.drag = null; $("g3d").style.cursor = "grab"; });
-window.addEventListener("mousemove", e => {
-  if (g3.drag) {
-    g3.rotY += (e.clientX - g3.drag[0]) * 0.006;
-    g3.rotX += (e.clientY - g3.drag[1]) * 0.006;
-    g3.rotX = Math.max(-1.4, Math.min(1.4, g3.rotX));
-    g3.drag = [e.clientX, e.clientY];
-  }
-});
-$("g3d").addEventListener("wheel", e => {
-  e.preventDefault();
-  const r = $("g3d").getBoundingClientRect();
-  // sobre a timeline (3D em tela cheia): zoom da timeline; no resto, zoom da esfera
-  if (!$("pane2d").clientWidth && e.clientY - r.top > r.height - 44) {
-    tlWheel(e, r);
-    return;
-  }
-  g3.zoom = Math.max(0.4, Math.min(3, g3.zoom * (e.deltaY < 0 ? 1.08 : 0.92)));
-}, { passive: false });
-$("g3d").addEventListener("mousemove", e => {
-  const r = $("g3d").getBoundingClientRect();
-  const mx = e.clientX - r.left, my = e.clientY - r.top;
-  let best = null, bd = 144;
+
+function nodeAt(mx, my) {
+  let best = null, bd = 196;
   for (const n of g3.nodes) {
     if (!n._p) continue;
     const d = (n._p[0]-mx)**2 + (n._p[1]-my)**2;
     if (d < bd) { bd = d; best = n; }
   }
-  if (best !== g3.hover && $("pane2d").clientWidth) { g3.hover = best; draw(); }
-  g3.hover = best;
-  $("g3d").style.cursor = best ? "pointer" : (g3.drag ? "grabbing" : "grab");
-  const tip = $("tip");
-  if (best) {
-    tip.innerHTML = best.tip();
-    tip.style.display = "block";
-    tip.style.left = Math.min(e.clientX + 14, innerWidth - 320) + "px";
-    tip.style.top = (e.clientY - 34) + "px";
-  } else tip.style.display = "none";
+  return best;
+}
+$("g3d").addEventListener("pointerdown", e => {
+  if (e.isPrimary === false) return;
+  g3.drag = [e.clientX, e.clientY];
+  g3.moved = 0;
+  $("g3d").setPointerCapture(e.pointerId);
+  $("g3d").style.cursor = "grabbing";
+  e.preventDefault();
 });
-$("g3d").addEventListener("mouseleave", () => { g3.hover = null; $("tip").style.display = "none"; });
-$("g3d").addEventListener("click", e => {
-  if (fly.moved > 6) { fly.moved = 0; return; }          // foi drag, não clique
+$("g3d").addEventListener("pointermove", e => {
   const r = $("g3d").getBoundingClientRect();
-  if (!$("pane2d").clientWidth && e.clientY - r.top > r.height - 44) {
-    const c = chapterAt(e.clientX - r.left);              // clique na timeline
-    if (c) jump(c.book, c.ch, 1);
+  if (g3.drag && !pinch) {
+    g3.rotY += (e.clientX - g3.drag[0]) * .006;
+    g3.rotX = Math.max(-1.4, Math.min(1.4, g3.rotX + (e.clientY - g3.drag[1]) * .006));
+    g3.moved += Math.abs(e.clientX - g3.drag[0]) + Math.abs(e.clientY - g3.drag[1]);
+    g3.drag = [e.clientX, e.clientY];
     return;
   }
-  if (g3.hover) {
-    // capítulo conectado à seleção? vai direto ao verso conectado
-    const sel = g3.sel && g3.sel.edges.find(x => x.ti === g3.hover._i);
-    const ref = sel ? sel.ref : g3.hover.ref;
-    jump(ref[0], ref[1], ref[2]);
-  }
+  if (e.pointerType !== "mouse") return;
+  const best = nodeAt(e.clientX - r.left, e.clientY - r.top);
+  if (best !== g3.hover) { g3.hover = best; draw(); }
+  $("g3d").style.cursor = best ? "pointer" : "grab";
+  if (best) showTip(best.tip(), e); else hideTip();
 });
+$("g3d").addEventListener("pointerup", e => {
+  const wasDrag = g3.moved > 6;
+  g3.drag = null; $("g3d").style.cursor = "grab";
+  if (wasDrag) return;
+  const r = $("g3d").getBoundingClientRect();
+  const best = nodeAt(e.clientX - r.left, e.clientY - r.top);
+  if (!best) return;
+  if (e.pointerType !== "mouse" && g3.hover !== best) {   // toque: 1º revela, 2º navega
+    g3.hover = best; showTip(best.tip(), e); draw(); return;
+  }
+  hideTip();
+  jump(best.ref[0], best.ref[1], best.ref[2]);
+});
+$("g3d").addEventListener("pointercancel", () => { g3.drag = null; });
+$("g3d").addEventListener("mouseleave", () => { g3.hover = null; hideTip(); });
+$("g3d").addEventListener("wheel", e => {
+  e.preventDefault();
+  g3.zoom = Math.max(.4, Math.min(3, g3.zoom * (e.deltaY < 0 ? 1.08 : .92)));
+}, { passive: false });
 
-/* tabs de view */
-function setView(v) {
-  [...$("viewtabs").children].forEach(b => b.classList.toggle("on", b.dataset.v === v));
-  $("arcbox").className = v;
-  applyFly();
-  bgCanvas = null; g3.stripKey = null; draw(); draw3d(); start3d();
-}
-for (const btn of $("viewtabs").children)
-  btn.onclick = () => setView(btn.dataset.v);
 for (const btn of $("ordertabs").children)
   btn.onclick = () => setOrder(btn.dataset.o);
 
-/* layouts: leitura | padrão | grafo L | sem grafo */
-let LAYOUT = "padrao";
-function applyLayout(name) {
-  LAYOUT = name;
-  document.body.className = "layout-" + name;
-  try { localStorage.setItem("mob_layout", name); } catch {}
-  [...$("laytabs").children].forEach(b => b.classList.toggle("on", b.dataset.l === name));
-  const p = $("pane3d");
-  if (name === "grafo") {
-    document.querySelector("main").prepend(p);   // 3D vira coluna lateral → L
-    setView("v2d");
-  } else if (p.parentElement !== $("arcbox")) {
-    $("arcbox").appendChild(p);
-  }
-  bgCanvas = null; g3.stripKey = null;
-  applyFly(); draw(); draw3d(); start3d(); focusVerse();
+/* redesenho central — usado no resize, na troca de aba e ao abrir/fechar notas.
+   start3d() é obrigatório aqui: loop3d morre se o pane fica display:none. */
+function relayout() {
+  bgCanvas = null;
+  draw(); draw3d(); start3d(); focusVerse();
 }
-for (const btn of $("laytabs").children)
-  btn.onclick = () => applyLayout(btn.dataset.l);
 
-/* flyout 3D arrastável (modo 2D+3D): contido na seção do grafo;
-   o limite é imaginário — só o clamp, nada visível */
-const fly = { x: null, y: null, d: 300, drag: null };
-function applyFly() {
-  const p = $("pane3d"), box = $("arcbox");
-  if (box.className !== "vsplit") { p.style.left = p.style.top = ""; return; }
-  const W = box.clientWidth, H = box.clientHeight;
-  fly.d = Math.max(200, Math.min(400, Math.round(H * 0.94)));
-  if (fly.x == null) { fly.x = W - fly.d / 2 - 40; fly.y = H / 2; }
-  const r = fly.d / 2;
-  fly.x = Math.max(r, Math.min(W - r, fly.x));
-  fly.y = H > fly.d ? Math.max(r, Math.min(H - r, fly.y)) : H / 2;
-  p.style.setProperty("--flyd", fly.d + "px");
-  p.style.left = (fly.x - fly.d / 2) + "px";
-  p.style.top = (fly.y - fly.d / 2) + "px";
+/* abas mobile (tab bar iOS-like): tudo por CSS sobre body[data-tab] */
+function setTab(t) {
+  document.body.dataset.tab = t;
+  [...$("tabbar").children].forEach(b => b.classList.toggle("on", b.dataset.tab === t));
+  try { localStorage.setItem("mob_tab", t); } catch {}
+  relayout();
 }
-window.addEventListener("mousemove", e => {
-  if (fly.drag) {
-    const rect = $("arcbox").getBoundingClientRect();
-    fly.x = e.clientX - rect.left - fly.drag[0];
-    fly.y = e.clientY - rect.top - fly.drag[1];
-    fly.moved = (fly.moved || 0) + Math.abs(e.movementX) + Math.abs(e.movementY);
-    applyFly();
-  }
+for (const b of $("tabbar").children) b.onclick = () => setTab(b.dataset.tab);
+const TABS = ["ler", "grafo", "notas"];
+function swipeTab(dir) {
+  const i = TABS.indexOf(document.body.dataset.tab || "ler");
+  const j = Math.max(0, Math.min(TABS.length - 1, i + dir));
+  if (j !== i) setTab(TABS[j]);
+}
+/* swipe horizontal rápido troca de aba (ignora gestos sobre os canvas) */
+let sw = null;
+document.addEventListener("pointerdown", e => {
+  if (!isMobile() || e.target.tagName === "CANVAS") { sw = null; return; }
+  sw = { x: e.clientX, y: e.clientY, t: performance.now() };
 });
-window.addEventListener("mouseup", () => { fly.drag = null; });
+document.addEventListener("pointerup", e => {
+  if (!sw) return;
+  const dx = e.clientX - sw.x, dy = e.clientY - sw.y, dt = performance.now() - sw.t;
+  sw = null;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(dy) && Math.abs(dx) / dt > 0.3)
+    swipeTab(dx < 0 ? 1 : -1);
+});
 
-/* divisor grafo ⇕ resto (redimensionável) */
+/* estilo do 3D: ✦ constelação limpa · ◍ sobre a esfera */
+let G3STYLE = "clean";
+function setG3Style(s) {
+  G3STYLE = s;
+  [...$("g3style").children].forEach(b => b.classList.toggle("on", b.dataset.s === s));
+  try { localStorage.setItem("mob_g3style", s); } catch {}
+  draw3d();
+}
+for (const btn of $("g3style").children)
+  btn.onclick = () => setG3Style(btn.dataset.s);
+
+/* divisor grafo ⇕ resto — escreve a CSS var --arch (funciona em qualquer breakpoint) */
 let splDrag = null;
-$("vsplitter").addEventListener("mousedown", e => { splDrag = e.clientY; e.preventDefault(); });
-window.addEventListener("mousemove", e => {
+$("vsplitter").addEventListener("pointerdown", e => {
+  splDrag = e.clientY;
+  $("vsplitter").setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+$("vsplitter").addEventListener("pointermove", e => {
   if (splDrag == null) return;
-  const box = $("arcbox");
   const h = Math.max(110, Math.min(innerHeight - 240,
-    box.clientHeight + (e.clientY - splDrag)));
-  box.style.height = h + "px";
+    $("arcbox").clientHeight + (e.clientY - splDrag)));
+  document.body.style.setProperty("--arch", h + "px");
   splDrag = e.clientY;
   try { localStorage.setItem("mob_archeight", h); } catch {}
-  bgCanvas = null; applyFly(); draw(); focusVerse();
+  bgCanvas = null; draw(); focusVerse();
 });
-window.addEventListener("mouseup", () => { splDrag = null; });
+$("vsplitter").addEventListener("pointerup", () => { splDrag = null; });
+$("vsplitter").addEventListener("pointercancel", () => { splDrag = null; });
 
 /* teleprompter: tamanho da letra + leitura automática */
 $("fsize").oninput = e => {
@@ -1004,6 +1290,7 @@ async function loadVerse() {
       missing.map(m => `<span class="chip miss">sem ${m}</span>`).join("");
   }
   $("ncon").textContent = verseData.links.length ? `· ${verseData.links.length}` : "";
+  $("ncon").title = "conexões deste versículo (o capítulo inteiro soma bem mais)";
   $("links").innerHTML = verseData.links.length ? verseData.links.map((l, i) =>
     `<div class="link" data-i="${i}">
        <span class="dir ${l.dir}">${l.dir === "out" ? "→" : "←"}</span>
@@ -1018,7 +1305,7 @@ async function loadVerse() {
   $("versions").innerHTML = verseData.versions.map(v =>
     `<div class="ver"><span class="t">${v.trans}</span>${esc(v.text)}</div>`).join("");
   renderNotes();
-  build3d(); draw();
+  build3d(); draw(); start3d();
 }
 
 /* ================= notas — storage local (app) ou navegador (demo) ===== */
@@ -1155,8 +1442,12 @@ function zeroState() {
   $("meterval").textContent = "—";
   const [cb, cc] = META.center.chapter;
   const [vb, vc, vv] = META.center.verse;
+  // duas métricas INDEPENDENTES — não são um par conectado entre si
   $("presence").innerHTML =
-    `<span class="chip origin">centro: ${refLabel(cb, cc)} · ${refLabel(vb, vc, vv)}</span>` +
+    `<span class="chip origin" title="somando as conexões de todos os versos do capítulo">` +
+    `capítulo mais conectado: ${refLabel(cb, cc)} · ${META.center.n.toLocaleString("pt-BR")}</span>` +
+    `<span class="chip origin" title="o versículo individual com mais conexões">` +
+    `verso mais conectado: ${refLabel(vb, vc, vv)} · ${META.center.verse_n}</span>` +
     `<span class="chip">${META.totals.verses.toLocaleString("pt-BR")} versos</span>` +
     `<span class="chip">${META.totals.crossrefs.toLocaleString("pt-BR")} conexões</span>`;
   $("ncon").textContent = "";
@@ -1256,6 +1547,15 @@ document.addEventListener("keydown", e => {
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "ArrowLeft") {
     e.preventDefault(); goHome(); return;   // ⌘⇧← volta à home
   }
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "+" || e.key === "=" || e.key === "-" || e.key === "_")) {
+    e.preventDefault();                     // ⌘⇧+ / ⌘⇧− zoom nos grafos (telas pequenas)
+    const zin = e.key === "+" || e.key === "=";
+    g3.zoom = Math.max(.4, Math.min(3, g3.zoom * (zin ? 1.2 : 1 / 1.2)));
+    const r = $("arc").getBoundingClientRect();
+    if (r.width) tlZoom(axisLen(r) / 2, zin ? 1.25 : 1 / 1.25, axisLen(r));
+    draw3d();
+    return;
+  }
   if (e.key === " ") { e.preventDefault(); $("play").click(); return; }
   if (e.key === "ArrowDown") { e.preventDefault(); step(1); }
   if (e.key === "ArrowUp") { e.preventDefault(); step(-1); }
@@ -1310,7 +1610,8 @@ $("vtoggle").onclick = () => {
 };
 
 /* ================= init ================= */
-window.addEventListener("resize", () => { bgCanvas = null; g3.stripKey = null; applyFly(); draw(); draw3d(); focusVerse(); });
+window.addEventListener("resize", relayout);
+mqPortrait.addEventListener("change", () => { relayout(); setTimeout(relayout, 250); });
 (async () => {
   META = await api("/api/meta");
   NOTES_LOCAL = !!META.demo;           // demo público: notas ficam no navegador
@@ -1321,22 +1622,19 @@ window.addEventListener("resize", () => { bgCanvas = null; g3.stripKey = null; a
     const fs = localStorage.getItem("mob_fs");
     if (fs) { $("fsize").value = fs; document.documentElement.style.setProperty("--fs", fs + "px"); }
     const ah = localStorage.getItem("mob_archeight");
-    if (ah) $("arcbox").style.height = ah + "px";
-  } catch {}
+    if (ah) document.body.style.setProperty("--arch", ah + "px");
+    setG3Style(localStorage.getItem("mob_g3style") || "clean");
+    setTab(localStorage.getItem("mob_tab") || "ler");
+  } catch { setG3Style("clean"); setTab("ler"); }
   const t = META.totals;
   $("stats").innerHTML = `<span><b>${t.verses.toLocaleString("pt-BR")}</b> versos</span>
     <span><b>${t.crossrefs.toLocaleString("pt-BR")}</b> conexões</span>
     <span><b>${t.translations}</b> versões</span>` +
     (META.demo ? `<span style="color:var(--hl)" title="demo com traduções de domínio público; notas ficam no seu navegador">DEMO</span>` : "");
   $("ntrans").textContent = t.translations;
-  let saved = "padrao";
-  try { saved = localStorage.getItem("mob_layout") || "padrao"; } catch {}
-  applyLayout(saved);
-  const view3d = () => { if (LAYOUT !== "grafo" && LAYOUT !== "nografo") setView("v3d"); };
   const h = location.hash.slice(1).split("/");
   if (h[0] === "q" && h[1]) {
     const q = decodeURIComponent(h[1]);
-    view3d();
     trail = [["#Q", q]]; pos = 0;
     await queryMode(q, true);
   } else if (h.length === 3 && h[0]) {
@@ -1344,8 +1642,7 @@ window.addEventListener("resize", () => { bgCanvas = null; g3.stripKey = null; a
     draw();
     await go({ book: h[0], ch: +h[1], v: +h[2] }, { fromTrail: true });
   } else {
-    view3d();                 // abertura: a bíblia inteira em 3D
-    zeroState();
+    zeroState();              // abertura: a bíblia inteira no 3D
   }
 })();
 </script>
