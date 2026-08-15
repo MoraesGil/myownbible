@@ -244,6 +244,45 @@
   ::-webkit-scrollbar { width: 9px; }
   ::-webkit-scrollbar-thumb { background: var(--grid); border-radius: 99px; }
 
+  body:not(.hasverse) #notesPanel,
+  body:not(.hasverse) #notesbtn,
+  body:not(.hasverse) #selbtn { display: none !important; }
+  /* ---------- notas por trecho ---------- */
+  #selbar {
+    display: none; align-items: center; gap: 8px; padding: 6px 14px;
+    background: rgba(201,133,0,.12); border-bottom: 1px solid var(--hl);
+    font-size: 12px; color: var(--ink);
+  }
+  .vs { position: relative; }
+  .nbars { position: absolute; left: -2px; top: 6px; bottom: 6px; display: flex; gap: 2px; }
+  .nbars i { width: 3px; border-radius: 2px; cursor: pointer; display: block; }
+  .nbars i:hover { width: 5px; }
+  .vs.sel { background: rgba(201,133,0,.14); outline: 1px solid var(--hl); }
+  body.selmode .vs { cursor: pointer; }
+  body.selmode .vs .num { color: var(--hl); }
+  .noteitem {
+    display: flex; gap: 9px; padding: 7px 6px; border-radius: 7px; cursor: pointer;
+    border-bottom: 1px solid var(--grid); align-items: stretch;
+  }
+  .noteitem:last-child { border-bottom: 0; }
+  .noteitem:hover { background: rgba(255,255,255,.04); }
+  .noteitem i { width: 4px; border-radius: 2px; flex: none; }
+  .noteitem .nmeta { font-size: 11px; color: var(--muted); }
+  .noteitem .nprev { font-size: 12.5px; color: var(--ink-2); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .swatch { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--border); cursor: pointer; padding: 0; }
+  .swatch.on { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+  /* drawer de notas: no desktop flutua ancorado ao leitor; no mobile é a aba */
+  @media (min-width: 768px) {
+    #notesPanel { display: none; }
+    body.notes-open #notesPanel {
+      display: block; position: fixed; right: 18px; bottom: 18px;
+      width: min(430px, 38vw); max-height: 62vh; overflow: auto; z-index: 55;
+      box-shadow: 0 18px 48px rgba(0,0,0,.65); border-color: var(--hl);
+    }
+  }
+
   /* ================= responsivo ================= */
   #tabbar { grid-area: tabs; display: none; background: var(--surface);
     border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); z-index: 50; }
@@ -355,7 +394,15 @@
       <button class="navbtn" id="home2" title="1º clique: ponto 0 da trilha · 2º clique: limpa tudo">⌂</button>
       <div id="tlwrap"><div id="tl"></div><span id="tlcur"></span></div>
       <div id="chlabel">—</div>
-      <span id="hint">↑↓ versos · ←→ trilha · hover no grafo mostra origem⇄destino</span>
+      <button class="navbtn" id="selbtn" title="selecionar trechos para anotar (ou segure um versículo)">⌖</button>
+      <button class="navbtn" id="notesbtn" title="notas deste trecho (n)">📝</button>
+      <span id="hint">↑↓ versos · ←→ trilha · segure um verso para selecionar</span>
+    </div>
+    <div id="selbar">
+      <span id="sellabel"></span>
+      <span style="flex:1"></span>
+      <button class="navbtn" id="seladd">＋ nota no trecho</button>
+      <button class="navbtn" id="selcancel">✕</button>
     </div>
     <div id="readbar">
       <span style="font-size:10px">A</span>
@@ -396,15 +443,23 @@
     </div>
     <div class="panel" id="notesPanel">
       <h3>Notas <span id="notestate"></span>
-        <span style="margin-left:auto; display:flex; gap:10px">
+        <span style="margin-left:auto; display:flex; gap:8px">
           <button class="minibtn" id="nbackup" title="baixar todas as suas notas (JSON)">⬇ backup</button>
           <button class="minibtn" id="nrestore" title="restaurar notas de um arquivo JSON">⬆ restaurar</button>
-        </span></h3>
+        </span>
+      </h3>
       <input type="file" id="nfile" accept="application/json" style="display:none">
-      <div class="notelabel">nota do <b id="nvref">verso</b></div>
-      <textarea class="note" id="noteV" placeholder="anotação pessoal deste versículo…"></textarea>
-      <div class="notelabel">nota do <b id="ncref">capítulo</b></div>
-      <textarea class="note" id="noteC" placeholder="anotação pessoal deste capítulo…"></textarea>
+      <div id="noteList"></div>
+      <div id="noteEdit" style="display:none">
+        <div class="notelabel">trecho: <b id="nrange">—</b></div>
+        <textarea class="note" id="noteT" placeholder="sua anotação…"></textarea>
+        <div style="display:flex; gap:8px; align-items:center; margin-top:6px">
+          <div id="ncolors" style="display:flex; gap:5px"></div>
+          <span style="flex:1"></span>
+          <button class="minibtn" id="ndel" style="color:var(--nt)">apagar</button>
+          <button class="cta2" id="nsave" style="padding:4px 14px">salvar</button>
+        </div>
+      </div>
     </div>
     <div class="panel">
       <h3>As <span id="ntrans">…</span> versões <button id="vtoggle">mostrar</button></h3>
@@ -428,7 +483,7 @@ const RAMP = ["#86b6ef","#6da7ec","#5598e7","#3987e5","#2a78d6","#256abf","#1c5c
 
 let META, CHAPTERS = [], CHIDX = {};
 let cur = null;                       // null = estado zero (home limpo)
-let chapterData = null, verseData = null, chapterNotes = { chapter: null, verses: {} };
+let chapterData = null, verseData = null, chapterNotes = [];
 let noteMap = new Set();
 let bgCanvas = null, goldArcs = [], hoverArc = null;
 let queryCtx = null;                  // busca ao centro do grafo
@@ -1242,19 +1297,39 @@ async function loadChapter(book, ch) {
 }
 function renderChapter() {
   const { book, ch } = chapterData;
-  const hasNote = chapterNotes.chapter || Object.keys(chapterNotes.verses).length;
-  $("chlabel").innerHTML = esc(refLabel(book, ch)) + (hasNote ? '<span class="notedot" title="há notas neste capítulo"></span>' : "");
+  document.body.classList.toggle("hasnote", chapterNotes.length > 0);
+  $("chlabel").innerHTML = esc(refLabel(book, ch)) +
+    (chapterNotes.length ? '<span class="notedot" title="há notas neste capítulo"></span>' : "");
   const box = $("verses");
   box.innerHTML = "";
   for (const v of chapterData.verses) {
     const d = document.createElement("div");
-    d.className = "vs"; d.dataset.v = v.v;
-    const vn = chapterNotes.verses[String(v.v)] ? '<span class="vnote" title="nota">●</span> ' : "";
-    d.innerHTML = `<div class="num">${vn}${v.v}</div><div class="tx">${esc(v.text)}</div>
+    d.className = "vs" + (selMode && selSet.has(v.v) ? " sel" : "");
+    d.dataset.v = v.v;
+    // uma barra por nota que cobre este verso (sobreposição fica legível)
+    const marks = notesCovering(v.v).map(n =>
+      `<i class="nbar" data-id="${n.id}" title="nota ${n.v_start === n.v_end ? "v. " + n.v_start : "v. " + n.v_start + "-" + n.v_end}"
+         style="background:${NOTE_COLORS[(n.color || 0) % NOTE_COLORS.length]}"></i>`).join("");
+    d.innerHTML = `<div class="nbars">${marks}</div>
+      <div class="num">${selMode ? (selSet.has(v.v) ? "◉" : "◯") : v.v}</div>
+      <div class="tx">${esc(v.text)}</div>
       <div class="badges"><span class="dotA" title="consenso ${v.agreement}"
         style="background:${agreeColor(v.agreement)}"></span>
         <span class="nx">${v.nx ? "⟡" + v.nx : ""}</span></div>`;
-    d.onclick = () => go(v.v ? { book, ch, v: v.v } : cur);
+    d.onclick = ev => {
+      if (selMode) return toggleSel(v.v);
+      if (ev.target.classList.contains("nbar")) {         // clicou na marca da nota
+        go({ book, ch, v: v.v });
+        const n = chapterNotes.find(x => String(x.id) === ev.target.dataset.id);
+        if (n) setTimeout(() => openNote(n), 60);
+        return;
+      }
+      go({ book, ch, v: v.v });
+    };
+    let lp = null;                                        // long-press = seleção
+    d.addEventListener("pointerdown", () => { lp = setTimeout(() => setSelMode(true, v.v), 550); });
+    for (const ev of ["pointerup", "pointerleave", "pointermove"])
+      d.addEventListener(ev, () => { clearTimeout(lp); });
     box.appendChild(d);
   }
 }
@@ -1308,29 +1383,48 @@ async function loadVerse() {
   build3d(); draw(); start3d();
 }
 
-/* ================= notas — storage local (app) ou navegador (demo) ===== */
-let NOTES_LOCAL = false;               // true no demo público: localStorage
-function lsAll() { try { return JSON.parse(localStorage.getItem("mob_notes") || "{}"); } catch { return {}; } }
-function lsSave(all) { localStorage.setItem("mob_notes", JSON.stringify(all)); }
+/* ================= notas por TRECHO ==========================================
+   Um trecho = (livro, capítulo, v_start..v_end). Trechos podem se sobrepor:
+   Salmos 99:1-10 e 99:7-8 coexistem, cada um com sua cor e sua data.
+   O texto só mostra as marcas coloridas; o conteúdo abre no drawer. */
+const NOTE_COLORS = ["#8b7bd8", "#2fa98a", "#4aa3d8", "#d8709a", "#c9a227", "#7bb356"];
+let NOTES_LOCAL = false;              // demo público: localStorage
+let selMode = false, selSet = new Set(), editing = null;
+
+function lsAll() { try { return JSON.parse(localStorage.getItem("mob_notes2") || "[]"); } catch { return []; } }
+function lsSave(a) { localStorage.setItem("mob_notes2", JSON.stringify(a)); }
+
 async function notesGet(book, ch) {
   if (!NOTES_LOCAL) return api(`/api/notes?book=${book}&ch=${ch}`);
-  const out = { chapter: null, verses: {} };
-  for (const [k, t] of Object.entries(lsAll())) {
-    const [b, c, v] = k.split(".");
-    if (b === book && +c === ch) { if (+v === 0) out.chapter = t; else out.verses[v] = t; }
-  }
-  return out;
+  return lsAll().filter(n => n.book === book && n.ch === ch)
+    .sort((x, y) => (x.v_end - x.v_start) - (y.v_end - y.v_start) || x.v_start - y.v_start);
 }
-async function notesSet(book, ch, v, text) {
-  if (!NOTES_LOCAL) return post("/api/note", { book, ch, v, text });
-  const all = lsAll(), k = `${book}.${ch}.${v}`;
-  if (text.trim()) all[k] = text; else delete all[k];
+async function notesSave(n) {
+  if (!NOTES_LOCAL) return post("/api/note", n);
+  const all = lsAll();
+  if (n.id) {
+    const k = all.findIndex(x => x.id === n.id);
+    if (k >= 0) all[k] = { ...all[k], ...n, updated: new Date().toISOString().slice(0, 19).replace("T", " ") };
+  } else {
+    n.id = Date.now();
+    n.created = n.updated = new Date().toISOString().slice(0, 19).replace("T", " ");
+    all.push(n);
+  }
   lsSave(all);
+  return { ok: true, id: n.id };
+}
+async function notesDel(id) {
+  if (!NOTES_LOCAL) return post("/api/note_delete", { id });
+  lsSave(lsAll().filter(n => n.id !== id));
 }
 async function notesMapFetch() {
   if (!NOTES_LOCAL) return api("/api/note_map");
-  return [...new Set(Object.keys(lsAll()).map(k => k.split(".").slice(0, 2).join(".")))].sort();
+  return [...new Set(lsAll().map(n => `${n.book}.${n.ch}`))].sort();
 }
+const notesCovering = v => chapterNotes.filter(
+  n => (n.v_start === 0 && n.v_end === 0) || (v >= n.v_start && v <= n.v_end));
+
+/* ---- backup / restore ---- */
 $("nbackup").onclick = async () => {
   const all = NOTES_LOCAL ? lsAll() : await api("/api/notes_all");
   const a = document.createElement("a");
@@ -1341,49 +1435,124 @@ $("nbackup").onclick = async () => {
 $("nrestore").onclick = () => $("nfile").click();
 $("nfile").onchange = async e => {
   const f = e.target.files[0]; if (!f) return;
-  const all = JSON.parse(await f.text());
-  for (const [k, text] of Object.entries(all)) {
-    const [b, c, v] = k.split(".");
-    await notesSet(b, +c, +v, text);
-  }
+  const raw = JSON.parse(await f.text());
+  const list = Array.isArray(raw) ? raw                       // formato novo
+    : Object.entries(raw).map(([k, text]) => {                // formato antigo
+        const [book, ch, v] = k.split(".");
+        return { book, ch: +ch, v_start: +v, v_end: +v, text, color: 0 };
+      });
+  for (const n of list)
+    await notesSave({ book: n.book, ch: n.ch, v_start: n.v_start, v_end: n.v_end,
+                      text: n.text, color: n.color || 0 });
   noteMap = new Set(await notesMapFetch());
   if (cur) { chapterNotes = await notesGet(cur.book, cur.ch); renderChapter(); focusVerse(); renderNotes(); }
   draw();
-  $("notestate").textContent = "notas restauradas ✓";
-  setTimeout(() => $("notestate").textContent = "", 2000);
+  $("notestate").textContent = `${list.length} notas restauradas ✓`;
+  setTimeout(() => $("notestate").textContent = "", 2200);
   e.target.value = "";
 };
 
-/* ================= notas ================= */
-function renderNotes() {
-  $("nvref").textContent = refLabel(cur.book, cur.ch, cur.v);
-  $("ncref").textContent = refLabel(cur.book, cur.ch);
-  $("noteV").value = chapterNotes.verses[String(cur.v)] || "";
-  $("noteC").value = chapterNotes.chapter || "";
+/* ---- seleção múltipla (estilo WhatsApp) ---- */
+function setSelMode(on, firstV) {
+  selMode = on;
+  selSet = new Set(on && firstV ? [firstV] : []);
+  document.body.classList.toggle("selmode", on);
+  renderSelBar(); renderChapter(); focusVerse();
 }
-async function saveNote(kind) {
-  const v = kind === "v" ? cur.v : 0;
-  const text = (kind === "v" ? $("noteV") : $("noteC")).value;
-  const prev = kind === "v" ? (chapterNotes.verses[String(cur.v)] || "") : (chapterNotes.chapter || "");
-  if (text === prev) return;
+function toggleSel(v) {
+  if (selSet.has(v)) selSet.delete(v); else selSet.add(v);
+  if (!selSet.size) return setSelMode(false);
+  renderSelBar(); renderChapter(); focusVerse();
+}
+function renderSelBar() {
+  const bar = $("selbar");
+  if (!selMode) { bar.style.display = "none"; return; }
+  const vs = [...selSet].sort((a, b) => a - b);
+  const rng = vs.length ? (vs[0] === vs[vs.length-1] ? `${vs[0]}` : `${vs[0]}-${vs[vs.length-1]}`) : "";
+  bar.style.display = "flex";
+  $("sellabel").textContent = `${selSet.size} selecionado${selSet.size > 1 ? "s" : ""} · ${cur ? refLabel(cur.book, cur.ch) : ""} ${rng}`;
+}
+$("selcancel").onclick = () => setSelMode(false);
+$("seladd").onclick = () => {
+  const vs = [...selSet].sort((a, b) => a - b);
+  if (!vs.length) return;
+  openNote({ book: cur.book, ch: cur.ch, v_start: vs[0], v_end: vs[vs.length-1],
+             text: "", color: chapterNotes.length % NOTE_COLORS.length });
+  setSelMode(false);
+};
+
+/* ---- drawer: lista as notas que cobrem o verso, específica primeiro ---- */
+function renderNotes() {
+  if (!cur) return;
+  const list = notesCovering(cur.v);
+  $("noteList").innerHTML = list.length ? list.map(n => {
+    const rng = n.v_start === 0 ? "capítulo inteiro"
+      : (n.v_start === n.v_end ? `v. ${n.v_start}` : `v. ${n.v_start}-${n.v_end}`);
+    return `<div class="noteitem" data-id="${n.id}">
+      <i style="background:${NOTE_COLORS[(n.color || 0) % NOTE_COLORS.length]}"></i>
+      <div style="flex:1;min-width:0">
+        <div class="nmeta"><b>${rng}</b> · ${(n.created || "").slice(0, 10)}</div>
+        <div class="nprev">${esc(n.text).slice(0, 90)}</div>
+      </div></div>`;
+  }).join("") : `<div class="empty">nenhuma nota neste versículo — selecione trechos com ⌖ para criar</div>`;
+  [...$("noteList").children].forEach(el => {
+    if (!el.dataset.id) return;
+    el.onclick = () => openNote(chapterNotes.find(n => String(n.id) === el.dataset.id));
+  });
+  if (!list.length) closeNote();
+}
+function openNote(n) {
+  editing = { ...n };
+  $("noteEdit").style.display = "block";
+  $("nrange").textContent = n.v_start === 0 ? refLabel(cur.book, cur.ch)
+    : `${refLabel(cur.book, cur.ch)}:${n.v_start}${n.v_end !== n.v_start ? "-" + n.v_end : ""}`;
+  $("noteT").value = n.text || "";
+  $("ncolors").innerHTML = NOTE_COLORS.map((c, i) =>
+    `<button class="swatch${i === (n.color || 0) ? " on" : ""}" data-c="${i}" style="background:${c}"></button>`).join("");
+  [...$("ncolors").children].forEach(b => b.onclick = () => {
+    editing.color = +b.dataset.c;
+    [...$("ncolors").children].forEach(x => x.classList.toggle("on", x === b));
+  });
+  $("ndel").style.display = n.id ? "" : "none";
+  document.body.classList.add("notes-open");
+  if (isMobile()) setTab("notas");
+  $("noteT").focus();
+}
+function closeNote() { editing = null; $("noteEdit").style.display = "none"; }
+$("nsave").onclick = async () => {
+  if (!editing) return;
+  editing.text = $("noteT").value;
   $("notestate").textContent = "salvando…";
-  await notesSet(cur.book, cur.ch, v, text);
-  if (kind === "v") {
-    if (text.trim()) chapterNotes.verses[String(cur.v)] = text;
-    else delete chapterNotes.verses[String(cur.v)];
-  } else chapterNotes.chapter = text.trim() ? text : null;
-  noteMap = new Set(await notesMapFetch());
+  await notesSave(editing);
+  await reloadNotes();
   $("notestate").textContent = "salvo ✓";
   setTimeout(() => $("notestate").textContent = "", 1600);
-  renderChapter(); focusVerse(); draw();
+  closeNote();
+};
+$("ndel").onclick = async () => {
+  if (!editing || !editing.id) return;
+  await notesDel(editing.id);
+  await reloadNotes();
+  closeNote();
+};
+async function reloadNotes() {
+  chapterNotes = await notesGet(cur.book, cur.ch);
+  noteMap = new Set(await notesMapFetch());
+  document.body.classList.toggle("hasnote", chapterNotes.length > 0);
+  renderChapter(); focusVerse(); renderNotes(); draw();
 }
-$("noteV").addEventListener("blur", () => saveNote("v"));
-$("noteC").addEventListener("blur", () => saveNote("c"));
-for (const id of ["noteV", "noteC"])
-  $(id).addEventListener("keydown", e => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") e.target.blur();
-    e.stopPropagation();
-  });
+$("notesbtn").onclick = () => {
+  if (!cur) return;
+  const list = notesCovering(cur.v);
+  if (list.length) openNote(list[0]);
+  else openNote({ book: cur.book, ch: cur.ch, v_start: cur.v, v_end: cur.v,
+                  text: "", color: chapterNotes.length % NOTE_COLORS.length });
+};
+$("selbtn").onclick = () => setSelMode(!selMode, cur ? cur.v : null);
+$("noteT").addEventListener("keydown", e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === "Enter") $("nsave").click();
+  e.stopPropagation();
+});
 
 /* ================= trilha (breadcrumb de saltos) ================= */
 let trail = [], pos = -1;
@@ -1431,7 +1600,7 @@ function zeroState() {
   queryCtx = null;
   $("crawl").classList.remove("list");
   $("verses").classList.remove("list");
-  chapterNotes = { chapter: null, verses: {} };
+  chapterNotes = [];
   $("q").value = ""; $("sugg").style.display = "none";
   history.replaceState(null, "", location.pathname);
   $("zerocta").classList.add("on");
@@ -1453,7 +1622,7 @@ function zeroState() {
   $("ncon").textContent = "";
   $("links").innerHTML = `<div class="empty">estado zero — comece a leitura ou faça uma busca</div>`;
   $("versions").innerHTML = "";
-  $("notesPanel").style.display = "none";
+  document.body.classList.remove("hasverse");
   renderTrail();
   hoverArc = null; draw();
   build3dWhole(); draw3d(); start3d();
@@ -1463,7 +1632,7 @@ async function queryMode(q, fromTrail = false) {
   const data = await api(`/api/query_center?q=${encodeURIComponent(q)}`);
   queryCtx = data;
   cur = null; verseData = null; chapterData = null;
-  chapterNotes = { chapter: null, verses: {} };
+  chapterNotes = [];
   if (!fromTrail) {
     trail = trail.slice(0, pos + 1);
     trail.push(["#Q", q]);
@@ -1471,7 +1640,7 @@ async function queryMode(q, fromTrail = false) {
   }
   location.hash = "q/" + encodeURIComponent(q);
   $("zerocta").classList.remove("on");
-  $("notesPanel").style.display = "none";
+  document.body.classList.remove("hasverse");
   $("crawl").classList.add("list");
   $("verses").classList.add("list");
   $("chlabel").textContent = `busca: “${q}”`;
@@ -1519,7 +1688,7 @@ async function go(ref, { fromTrail = false } = {}) {
   $("crawl").classList.remove("list");
   $("verses").classList.remove("list");
   $("zerocta").classList.remove("on");
-  $("notesPanel").style.display = "";
+  document.body.classList.add("hasverse");
   const sameCh = chapterData && cur && cur.book === ref.book && cur.ch === ref.ch;
   cur = { ...ref };
   location.hash = `${cur.book}/${cur.ch}/${cur.v}`;
@@ -1556,6 +1725,8 @@ document.addEventListener("keydown", e => {
     draw3d();
     return;
   }
+  if (e.key === "Escape") { document.body.classList.remove("notes-open"); closeNote(); return; }
+  if (e.key === "n") { e.preventDefault(); $("notesbtn").click(); return; }
   if (e.key === " ") { e.preventDefault(); $("play").click(); return; }
   if (e.key === "ArrowDown") { e.preventDefault(); step(1); }
   if (e.key === "ArrowUp") { e.preventDefault(); step(-1); }

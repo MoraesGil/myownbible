@@ -32,53 +32,78 @@ def db():
 
 
 def notes_db():
+    """Notas por TRECHO: (book, ch, v_start..v_end). Trechos podem se sobrepor —
+    Salmos 99:1-10 e 99:7-8 coexistem, cada um com sua data."""
     con = sqlite3.connect(NOTES_DB)
     con.row_factory = sqlite3.Row
-    con.execute("CREATE TABLE IF NOT EXISTS notes("
-                "book TEXT, ch INTEGER, v INTEGER DEFAULT 0, text TEXT,"
-                "updated TEXT DEFAULT (datetime('now')),"
-                "PRIMARY KEY(book, ch, v))")     # v=0 → nota do capítulo
+    con.execute("""CREATE TABLE IF NOT EXISTS notes2(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        book TEXT, ch INTEGER, v_start INTEGER, v_end INTEGER,
+        text TEXT, color INTEGER DEFAULT 0,
+        created TEXT DEFAULT (datetime('now')),
+        updated TEXT DEFAULT (datetime('now')))""")
+    con.execute("CREATE INDEX IF NOT EXISTS notes2_loc ON notes2(book, ch)")
+    # migração do formato antigo (1 nota por verso/capítulo)
+    legacy = con.execute("SELECT name FROM sqlite_master WHERE type='table' "
+                         "AND name='notes'").fetchone()
+    if legacy:
+        con.execute("INSERT INTO notes2(book, ch, v_start, v_end, text, created, updated) "
+                    "SELECT book, ch, v, v, text, updated, updated FROM notes")
+        con.execute("DROP TABLE notes")
+        con.commit()
     return con
 
 
 def notes_get(book: str, ch: int):
     con = notes_db()
-    out = {"chapter": None, "verses": {}}
-    for r in con.execute("SELECT v, text FROM notes WHERE book=? AND ch=?", (book, ch)):
-        if r["v"] == 0:
-            out["chapter"] = r["text"]
-        else:
-            out["verses"][str(r["v"])] = r["text"]
+    out = [dict(r) for r in con.execute(
+        "SELECT id, v_start, v_end, text, color, created, updated FROM notes2 "
+        "WHERE book=? AND ch=? ORDER BY (v_end - v_start), v_start", (book, ch))]
     con.close()
     return out
 
 
-def notes_set(book: str, ch: int, v: int, text: str):
+def notes_set(book: str, ch: int, v_start: int, v_end: int, text: str,
+              color: int = 0, nid=None):
     con = notes_db()
-    if text.strip():
-        con.execute("INSERT INTO notes(book, ch, v, text, updated) "
-                    "VALUES (?,?,?,?,datetime('now')) "
-                    "ON CONFLICT(book, ch, v) DO UPDATE SET text=excluded.text, "
-                    "updated=excluded.updated", (book, ch, v, text))
+    if not text.strip():
+        if nid:
+            con.execute("DELETE FROM notes2 WHERE id=?", (nid,))
+        con.commit(); con.close()
+        return {"ok": True, "deleted": True}
+    if nid:
+        con.execute("UPDATE notes2 SET text=?, color=?, v_start=?, v_end=?, "
+                    "updated=datetime('now') WHERE id=?",
+                    (text, color, v_start, v_end, nid))
     else:
-        con.execute("DELETE FROM notes WHERE book=? AND ch=? AND v=?", (book, ch, v))
-    con.commit()
-    con.close()
-    return {"ok": True}
+        cur = con.execute(
+            "INSERT INTO notes2(book, ch, v_start, v_end, text, color) "
+            "VALUES (?,?,?,?,?,?)", (book, ch, v_start, v_end, text, color))
+        nid = cur.lastrowid
+    con.commit(); con.close()
+    return {"ok": True, "id": nid}
 
 
-def notes_all():
+def notes_delete(nid: int):
     con = notes_db()
-    out = {f"{r['book']}.{r['ch']}.{r['v']}": r["text"]
-           for r in con.execute("SELECT book, ch, v, text FROM notes")}
-    con.close()
-    return out
+    con.execute("DELETE FROM notes2 WHERE id=?", (nid,))
+    con.commit(); con.close()
+    return {"ok": True}
 
 
 def note_map():
     con = notes_db()
     out = sorted({f"{r['book']}.{r['ch']}" for r in
-                  con.execute("SELECT DISTINCT book, ch FROM notes")})
+                  con.execute("SELECT DISTINCT book, ch FROM notes2")})
+    con.close()
+    return out
+
+
+def notes_all():
+    con = notes_db()
+    out = [dict(r) for r in con.execute(
+        "SELECT id, book, ch, v_start, v_end, text, color, created, updated "
+        "FROM notes2 ORDER BY book, ch, v_start")]
     con.close()
     return out
 
@@ -391,8 +416,13 @@ class H(BaseHTTPRequestHandler):
             n = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(n) or b"{}")
             if u.path == "/api/note":
-                self._json(notes_set(body["book"], int(body["ch"]),
-                                     int(body.get("v") or 0), body.get("text", "")))
+                self._json(notes_set(
+                    body["book"], int(body["ch"]),
+                    int(body.get("v_start") or 0), int(body.get("v_end") or 0),
+                    body.get("text", ""), int(body.get("color") or 0),
+                    body.get("id")))
+            elif u.path == "/api/note_delete":
+                self._json(notes_delete(int(body["id"])))
             else:
                 self._json({"error": "not found"}, 404)
         except Exception as e:  # noqa: BLE001
